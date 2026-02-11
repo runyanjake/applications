@@ -14,8 +14,8 @@ services:
       - traefik
     labels:
       - traefik.enable=true
-      - traefik.http.routers.workouts.rule=Host(`apply.whitney.rip`)
-      - traefik.http.routers.workouts.tls=true
-      - traefik.http.routers.workouts.tls.certresolver=lets-encrypt
-      - traefik.http.services.workouts.loadbalancer.server.port=80
+      - traefik.http.routers.jat.rule=Host(`apply.whitney.rip`)
+      - traefik.http.routers.jat.tls=true
+      - traefik.http.routers.jat.tls.certresolver=lets-encrypt
+      - traefik.http.services.jat.loadbalancer.server.port=80
       - traefik.port=80
