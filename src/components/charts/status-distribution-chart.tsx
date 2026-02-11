@@ -39,8 +39,8 @@ export function StatusDistributionChart({
             nameKey="label"
             cx="50%"
             cy="50%"
-            outerRadius={100}
-            innerRadius={50}
+            outerRadius={height > 250 ? 100 : 70}
+            innerRadius={height > 250 ? 50 : 30}
           >
             {data.map((entry, i) => (
               <Cell key={i} fill={entry.color} />

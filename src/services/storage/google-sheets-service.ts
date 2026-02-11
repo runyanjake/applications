@@ -1,6 +1,5 @@
-import type { Application, ApplicationFormData } from "../../types/application";
+import type { Application } from "../../types/application";
 import type { StorageConfig, StorageService } from "../../types/storage";
-import { generateId } from "../../utils/id";
 import {
   HEADER_ROW,
   applicationToRow,
@@ -32,82 +31,48 @@ export class GoogleSheetsService implements StorageService {
     return rows.slice(1).map(rowToApplication);
   }
 
-  async create(data: ApplicationFormData): Promise<Application> {
-    await this.ensureHeaderRow();
-    const app: Application = {
-      ...data,
-      id: generateId(),
-      lastUpdated: new Date().toISOString(),
-    };
-    await window.gapi.client.sheets.spreadsheets.values.append({
-      spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!A:Q`,
-      valueInputOption: "USER_ENTERED",
-      resource: { values: [applicationToRow(app)] },
-    });
-    return app;
-  }
-
-  async update(
-    id: string,
-    data: Partial<Application>,
-  ): Promise<Application> {
-    const rows = await this.getRawRows();
-    const rowIndex = rows.findIndex((row) => row[0] === id);
-    if (rowIndex === -1) throw new Error(`Application ${id} not found`);
-
-    const existing = rowToApplication(rows[rowIndex]!);
-    const updated: Application = {
-      ...existing,
-      ...data,
-      lastUpdated: new Date().toISOString(),
-    };
-    const sheetRow = rowIndex + 2;
+  async writeAll(applications: Application[]): Promise<void> {
+    const dataRows = applications.map(applicationToRow);
+    const allRows = [HEADER_ROW, ...dataRows];
+    const endRow = allRows.length;
 
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!A${sheetRow}:Q${sheetRow}`,
+      range: `${this.sheetName}!A1:Q${endRow}`,
       valueInputOption: "USER_ENTERED",
-      resource: { values: [applicationToRow(updated)] },
+      resource: { values: allRows },
     });
-    return updated;
-  }
 
-  async delete(id: string): Promise<void> {
-    const rows = await this.getRawRows();
-    const rowIndex = rows.findIndex((row) => row[0] === id);
-    if (rowIndex === -1) return;
-
+    // Clear any leftover rows below the current data
     const sheetId = await this.getSheetId();
-    const startIndex = rowIndex + 1;
+    const response =
+      await window.gapi.client.sheets.spreadsheets.get({
+        spreadsheetId: this.spreadsheetId,
+      });
+    const sheet = response.result.sheets?.find(
+      (s) => s.properties?.sheetId === sheetId,
+    );
+    const totalRows = sheet?.properties?.gridProperties?.rowCount ?? 1000;
 
-    await window.gapi.client.sheets.spreadsheets.batchUpdate({
-      spreadsheetId: this.spreadsheetId,
-      resource: {
-        requests: [
-          {
-            deleteDimension: {
-              range: {
-                sheetId,
-                dimension: "ROWS",
-                startIndex,
-                endIndex: startIndex + 1,
+    if (totalRows > endRow) {
+      await window.gapi.client.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: this.spreadsheetId,
+        resource: {
+          requests: [
+            {
+              deleteDimension: {
+                range: {
+                  sheetId,
+                  dimension: "ROWS",
+                  startIndex: endRow,
+                  endIndex: totalRows,
+                },
               },
             },
-          },
-        ],
-      },
-    });
-  }
-
-  private async getRawRows(): Promise<string[][]> {
-    const response =
-      await window.gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A:Q`,
+          ],
+        },
       });
-    const rows = response.result.values ?? [];
-    return rows.length > 1 ? rows.slice(1) : [];
+    }
   }
 
   private async getSheetId(): Promise<number> {

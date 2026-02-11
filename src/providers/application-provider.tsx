@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -12,19 +13,25 @@ import type {
   ApplicationFormData,
 } from "../types/application";
 import { useStorage } from "../hooks/use-storage";
+import { generateId } from "../utils/id";
 import { sessionGet, sessionSet } from "../utils/session-store";
+import {
+  computeVersion,
+  shouldAutoSync,
+  INITIAL_SYNC_STATE,
+  type SyncState,
+} from "../utils/sync";
 
 interface ApplicationContextValue {
   applications: Application[];
   isLoading: boolean;
-  error: string | null;
-  addApplication: (data: ApplicationFormData) => Promise<void>;
-  updateApplication: (
-    id: string,
-    data: Partial<Application>,
-  ) => Promise<void>;
-  deleteApplication: (id: string) => Promise<void>;
-  refreshFromSheet: () => Promise<void>;
+  syncState: SyncState;
+  addApplication: (data: ApplicationFormData) => void;
+  updateApplication: (id: string, data: Partial<Application>) => void;
+  deleteApplication: (id: string) => void;
+  sync: () => Promise<void>;
+  forceOverwrite: () => Promise<void>;
+  reloadFromRemote: () => Promise<void>;
   getFilteredApplications: (filters: ApplicationFilters) => Application[];
 }
 
@@ -32,6 +39,7 @@ export const ApplicationContext =
   createContext<ApplicationContextValue | null>(null);
 
 const SESSION_KEY = "applications";
+const SYNC_STATE_KEY = "sync-state";
 
 export function ApplicationProvider({ children }: { children: ReactNode }) {
   const { storageService, isConfigured } = useStorage();
@@ -39,60 +47,200 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     () => sessionGet<Application[]>(SESSION_KEY) ?? [],
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [syncState, setSyncState] = useState<SyncState>(
+    () => sessionGet<SyncState>(SYNC_STATE_KEY) ?? INITIAL_SYNC_STATE,
+  );
+  const appsRef = useRef(applications);
+  const syncRef = useRef(syncState);
 
-  const persist = useCallback((apps: Application[]) => {
-    setApplications(apps);
-    sessionSet(SESSION_KEY, apps);
+  appsRef.current = applications;
+  syncRef.current = syncState;
+
+  const persistLocal = useCallback(
+    (apps: Application[], markDirty: boolean) => {
+      setApplications(apps);
+      sessionSet(SESSION_KEY, apps);
+      if (markDirty) {
+        setSyncState((prev) => {
+          const next = {
+            ...prev,
+            isDirty: true,
+            pendingChanges: prev.pendingChanges + 1,
+            status: "pending" as const,
+            error: null,
+          };
+          sessionSet(SYNC_STATE_KEY, next);
+          return next;
+        });
+      }
+    },
+    [],
+  );
+
+  const markSynced = useCallback((apps: Application[]) => {
+    const version = computeVersion(apps);
+    const next: SyncState = {
+      lastSyncedAt: Date.now(),
+      isDirty: false,
+      pendingChanges: 0,
+      status: "synced",
+      remoteVersion: version,
+      error: null,
+    };
+    setSyncState(next);
+    sessionSet(SYNC_STATE_KEY, next);
   }, []);
 
-  const refreshFromSheet = useCallback(async () => {
+  // Initial load from sheet
+  useEffect(() => {
+    if (!isConfigured) return;
+    const cached = sessionGet<Application[]>(SESSION_KEY);
+    if (cached && cached.length > 0) return;
+    setIsLoading(true);
+    storageService.getAll().then(
+      (apps) => {
+        setApplications(apps);
+        sessionSet(SESSION_KEY, apps);
+        markSynced(apps);
+        setIsLoading(false);
+      },
+      (err) => {
+        console.error("[sync] Initial load from sheet failed:", err);
+        setIsLoading(false);
+      },
+    );
+  }, [isConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync: read remote version, compare, write if safe
+  const sync = useCallback(async () => {
+    if (!isConfigured) return;
+    setSyncState((prev) => ({ ...prev, status: "syncing", error: null }));
+    sessionSet(SYNC_STATE_KEY, { ...syncRef.current, status: "syncing" });
+
+    try {
+      const remoteApps = await storageService.getAll();
+      const remoteVersion = computeVersion(remoteApps);
+
+      if (
+        syncRef.current.remoteVersion !== null &&
+        remoteVersion !== syncRef.current.remoteVersion
+      ) {
+        console.error("[sync] Conflict detected — remote version changed since last sync");
+        const next: SyncState = {
+          ...syncRef.current,
+          status: "conflict",
+          error:
+            "Remote spreadsheet was modified since your last sync. Overwrite remote or reload from remote?",
+        };
+        setSyncState(next);
+        sessionSet(SYNC_STATE_KEY, next);
+        return;
+      }
+
+      await storageService.writeAll(appsRef.current);
+      markSynced(appsRef.current);
+    } catch (err) {
+      console.error("[sync] Sync to remote failed:", err);
+      const msg =
+        err instanceof Error ? err.message : "Sync failed";
+      const next: SyncState = {
+        ...syncRef.current,
+        status: "error",
+        error: msg,
+      };
+      setSyncState(next);
+      sessionSet(SYNC_STATE_KEY, next);
+    }
+  }, [isConfigured, storageService, markSynced]);
+
+  // Force overwrite remote (resolve conflict by pushing local)
+  const forceOverwrite = useCallback(async () => {
+    if (!isConfigured) return;
+    setSyncState((prev) => ({ ...prev, status: "syncing", error: null }));
+    try {
+      await storageService.writeAll(appsRef.current);
+      markSynced(appsRef.current);
+    } catch (err) {
+      console.error("[sync] Force overwrite failed:", err);
+      const msg =
+        err instanceof Error ? err.message : "Sync failed";
+      setSyncState((prev) => ({ ...prev, status: "error", error: msg }));
+    }
+  }, [isConfigured, storageService, markSynced]);
+
+  // Reload from remote (resolve conflict by pulling remote)
+  const reloadFromRemote = useCallback(async () => {
     if (!isConfigured) return;
     setIsLoading(true);
-    setError(null);
     try {
       const apps = await storageService.getAll();
-      persist(apps);
+      setApplications(apps);
+      sessionSet(SESSION_KEY, apps);
+      markSynced(apps);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load applications",
-      );
+      console.error("[sync] Reload from remote failed:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [isConfigured, storageService, persist]);
+  }, [isConfigured, storageService, markSynced]);
 
-  useEffect(() => {
-    if (isConfigured && applications.length === 0) {
-      refreshFromSheet();
+  // Auto-sync check after local mutations
+  const maybeAutoSync = useCallback(() => {
+    if (shouldAutoSync(syncRef.current)) {
+      sync();
     }
-  }, [isConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sync]);
 
+  // Local-only CRUD
   const addApplication = useCallback(
-    async (data: ApplicationFormData) => {
-      const app = await storageService.create(data);
-      persist([app, ...applications]);
+    (data: ApplicationFormData) => {
+      const app: Application = {
+        ...data,
+        id: generateId(),
+        lastUpdated: new Date().toISOString(),
+      };
+      persistLocal([app, ...appsRef.current], true);
+      maybeAutoSync();
     },
-    [storageService, applications, persist],
+    [persistLocal, maybeAutoSync],
   );
 
   const updateApplication = useCallback(
-    async (id: string, data: Partial<Application>) => {
-      const updated = await storageService.update(id, data);
-      persist(
-        applications.map((a) => (a.id === id ? updated : a)),
+    (id: string, data: Partial<Application>) => {
+      const updated = appsRef.current.map((a) =>
+        a.id === id
+          ? { ...a, ...data, lastUpdated: new Date().toISOString() }
+          : a,
       );
+      persistLocal(updated, true);
+      maybeAutoSync();
     },
-    [storageService, applications, persist],
+    [persistLocal, maybeAutoSync],
   );
 
   const deleteApplication = useCallback(
-    async (id: string) => {
-      await storageService.delete(id);
-      persist(applications.filter((a) => a.id !== id));
+    (id: string) => {
+      persistLocal(
+        appsRef.current.filter((a) => a.id !== id),
+        true,
+      );
+      maybeAutoSync();
     },
-    [storageService, applications, persist],
+    [persistLocal, maybeAutoSync],
   );
+
+  // Best-effort sync on page unload
+  useEffect(() => {
+    const handler = () => {
+      if (syncRef.current.isDirty && isConfigured) {
+        storageService.writeAll(appsRef.current).catch((err) => {
+          console.error("[sync] Best-effort sync on unload failed:", err);
+        });
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isConfigured, storageService]);
 
   const getFilteredApplications = useCallback(
     (filters: ApplicationFilters) => {
@@ -146,21 +294,25 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     () => ({
       applications,
       isLoading,
-      error,
+      syncState,
       addApplication,
       updateApplication,
       deleteApplication,
-      refreshFromSheet,
+      sync,
+      forceOverwrite,
+      reloadFromRemote,
       getFilteredApplications,
     }),
     [
       applications,
       isLoading,
-      error,
+      syncState,
       addApplication,
       updateApplication,
       deleteApplication,
-      refreshFromSheet,
+      sync,
+      forceOverwrite,
+      reloadFromRemote,
       getFilteredApplications,
     ],
   );

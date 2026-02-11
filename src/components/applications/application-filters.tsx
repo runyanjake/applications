@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
-  APPLICATION_STATUSES,
   INTEREST_LEVELS,
+  PRE_INTERVIEW_STATUSES,
+  ACTIVE_STATUSES,
+  COMPLETE_STATUSES,
   type ApplicationFilters,
 } from "../../types/application";
 import { formatStatus } from "../../utils/formatters";
@@ -78,11 +80,21 @@ export function ApplicationFiltersBar({
               }
               className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
             >
-              {APPLICATION_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {formatStatus(s)}
-                </option>
-              ))}
+              <optgroup label="Pre-Interview">
+                {PRE_INTERVIEW_STATUSES.map((s) => (
+                  <option key={s} value={s}>{formatStatus(s)}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Active">
+                {ACTIVE_STATUSES.map((s) => (
+                  <option key={s} value={s}>{formatStatus(s)}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Complete">
+                {COMPLETE_STATUSES.map((s) => (
+                  <option key={s} value={s}>{formatStatus(s)}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
 

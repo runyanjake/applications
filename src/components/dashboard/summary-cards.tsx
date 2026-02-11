@@ -1,4 +1,5 @@
 import type { Application } from "../../types/application";
+import { ACTIVE_STATUSES } from "../../types/application";
 
 interface SummaryCardsProps {
   applications: Application[];
@@ -6,17 +7,14 @@ interface SummaryCardsProps {
 
 export function SummaryCards({ applications }: SummaryCardsProps) {
   const total = applications.length;
-  const active = applications.filter(
-    (a) =>
-      a.status === "applied" ||
-      a.status === "applying" ||
-      a.status === "interviewing",
+  const active = applications.filter((a) =>
+    ACTIVE_STATUSES.includes(a.status),
   ).length;
   const interviews = applications.filter(
     (a) => a.status === "interviewing",
   ).length;
   const offers = applications.filter(
-    (a) => a.status === "offered" || a.status === "accepted",
+    (a) => a.status === "offered",
   ).length;
 
   const cards = [

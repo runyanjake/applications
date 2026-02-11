@@ -14,7 +14,7 @@ export function AddApplicationPage() {
   if (!isConfigured) return <SpreadsheetSetup />;
 
   const handleSubmit = async (data: ApplicationFormData) => {
-    await addApplication(data);
+    addApplication(data);
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3000);
   };

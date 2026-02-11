@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { Application, ApplicationStatus } from "../../types/application";
-import { APPLICATION_STATUSES } from "../../types/application";
+import {
+  STATUS_TRANSITIONS,
+  STATUS_CATEGORY,
+} from "../../types/application";
 import { formatDate, formatSalary, formatStatus } from "../../utils/formatters";
 import { StatusBadge } from "./status-badge";
 import { useApplications } from "../../hooks/use-applications";
@@ -9,12 +12,21 @@ interface ApplicationTableProps {
   applications: Application[];
 }
 
-type SortField = "position" | "companyName" | "status" | "dateApplied" | "lastUpdated";
+type SortField = "position" | "companyName" | "status" | "dateApplied";
 type SortDir = "asc" | "desc";
+
+function formatLocation(app: Application): string {
+  if (app.remote) {
+    const parts = [app.city, app.state, app.country].filter(Boolean);
+    return parts.length > 0 ? `Remote (${parts.join(", ")})` : "Remote";
+  }
+  const parts = [app.city, app.state, app.country].filter(Boolean);
+  return parts.join(", ") || "—";
+}
 
 export function ApplicationTable({ applications }: ApplicationTableProps) {
   const { updateApplication, deleteApplication } = useApplications();
-  const [sortField, setSortField] = useState<SortField>("lastUpdated");
+  const [sortField, setSortField] = useState<SortField>("dateApplied");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
 
@@ -54,6 +66,12 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
     </th>
   );
 
+  const ColHeader = ({ children }: { children: React.ReactNode }) => (
+    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+      {children}
+    </th>
+  );
+
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
       <table className="min-w-full divide-y divide-gray-200">
@@ -61,16 +79,13 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
           <tr>
             <SortHeader field="position">Position</SortHeader>
             <SortHeader field="companyName">Company</SortHeader>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-              Location
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-              Salary
-            </th>
+            <ColHeader>Location</ColHeader>
+            <ColHeader>Salary</ColHeader>
+            <ColHeader>Interest</ColHeader>
             <SortHeader field="status">Status</SortHeader>
             <SortHeader field="dateApplied">Applied</SortHeader>
-            <SortHeader field="lastUpdated">Updated</SortHeader>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <ColHeader>Notes</ColHeader>
+            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
               Actions
             </th>
           </tr>
@@ -78,6 +93,7 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
         <tbody className="divide-y divide-gray-200">
           {sorted.map((app) => (
             <tr key={app.id} className="hover:bg-gray-50">
+              {/* Position + job posting link */}
               <td className="whitespace-nowrap px-4 py-3">
                 <div className="text-sm font-medium text-gray-900">
                   {app.position}
@@ -93,66 +109,67 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
                   </a>
                 )}
               </td>
+
+              {/* Company + website */}
               <td className="whitespace-nowrap px-4 py-3">
-                <div className="text-sm text-gray-900">
-                  {app.companyName}
-                </div>
+                <div className="text-sm text-gray-900">{app.companyName}</div>
                 {app.companyWebsite && (
                   <a
                     href={app.companyWebsite}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-gray-400 hover:underline"
+                    className="text-xs text-indigo-500 hover:underline"
                   >
                     Website
                   </a>
                 )}
               </td>
+
+              {/* Location */}
               <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                {app.remote ? (
-                  <span className="text-green-600">Remote</span>
-                ) : (
-                  [app.city, app.state, app.country]
-                    .filter(Boolean)
-                    .join(", ") || "\u2014"
-                )}
+                {formatLocation(app)}
               </td>
+
+              {/* Salary */}
               <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
                 {formatSalary(app.salaryMin, app.salaryMax, app.currency)}
               </td>
+
+              {/* Interest */}
+              <td className="whitespace-nowrap px-4 py-3">
+                <InterestBadge interest={app.interest} />
+              </td>
+
+              {/* Status (inline edit) */}
               <td className="whitespace-nowrap px-4 py-3">
                 {editingStatus === app.id ? (
-                  <select
-                    value={app.status}
-                    autoFocus
-                    onBlur={() => setEditingStatus(null)}
-                    onChange={async (e) => {
-                      await updateApplication(app.id, {
-                        status: e.target.value as ApplicationStatus,
-                      });
+                  <StatusSelect
+                    current={app.status}
+                    onChange={(s) => {
+                      updateApplication(app.id, { status: s });
                       setEditingStatus(null);
                     }}
-                    className="rounded border border-gray-300 px-1.5 py-0.5 text-xs"
-                  >
-                    {APPLICATION_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {formatStatus(s)}
-                      </option>
-                    ))}
-                  </select>
+                    onBlur={() => setEditingStatus(null)}
+                  />
                 ) : (
                   <button onClick={() => setEditingStatus(app.id)}>
                     <StatusBadge status={app.status} />
                   </button>
                 )}
               </td>
+
+              {/* Date Applied */}
               <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                 {formatDate(app.dateApplied)}
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                {formatDate(app.lastUpdated)}
+
+              {/* Notes (truncated) */}
+              <td className="max-w-[200px] truncate px-4 py-3 text-sm text-gray-500" title={app.notes}>
+                {app.notes || "—"}
               </td>
-              <td className="whitespace-nowrap px-4 py-3">
+
+              {/* Actions */}
+              <td className="whitespace-nowrap px-4 py-3 text-right">
                 <button
                   onClick={() => {
                     if (window.confirm("Delete this application?")) {
@@ -169,5 +186,72 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+const INTEREST_COLORS: Record<string, string> = {
+  high: "bg-green-100 text-green-700",
+  medium: "bg-yellow-100 text-yellow-700",
+  low: "bg-gray-100 text-gray-600",
+};
+
+function InterestBadge({ interest }: { interest: string }) {
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${INTEREST_COLORS[interest] ?? "bg-gray-100 text-gray-600"}`}
+    >
+      {interest}
+    </span>
+  );
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  "pre-interview": "Pre-Interview",
+  active: "Active",
+  complete: "Complete",
+};
+
+const CATEGORY_OPTION_COLOR: Record<string, string> = {
+  "pre-interview": "#4338ca",  // indigo
+  active: "#b45309",           // amber
+  complete: "#047857",         // green
+};
+
+function StatusSelect({
+  current,
+  onChange,
+  onBlur,
+}: {
+  current: ApplicationStatus;
+  onChange: (s: ApplicationStatus) => void;
+  onBlur: () => void;
+}) {
+  const options = [current, ...STATUS_TRANSITIONS[current]];
+  // Group options by category
+  const groups = new Map<string, ApplicationStatus[]>();
+  for (const s of options) {
+    const cat = STATUS_CATEGORY[s];
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat)!.push(s);
+  }
+
+  return (
+    <select
+      value={current}
+      autoFocus
+      onBlur={onBlur}
+      onChange={(e) => onChange(e.target.value as ApplicationStatus)}
+      className="rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+    >
+      {Array.from(groups.entries()).map(([cat, statuses]) => (
+        <optgroup key={cat} label={CATEGORY_LABELS[cat] ?? cat}>
+          {statuses.map((s) => (
+            <option key={s} value={s} style={{ color: CATEGORY_OPTION_COLOR[cat] }}>
+              {formatStatus(s)}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
   );
 }

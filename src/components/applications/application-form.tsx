@@ -1,8 +1,10 @@
 import { useState } from "react";
 import {
-  APPLICATION_STATUSES,
   CURRENCIES,
   INTEREST_LEVELS,
+  PRE_INTERVIEW_STATUSES,
+  ACTIVE_STATUSES,
+  COMPLETE_STATUSES,
   type ApplicationFormData,
 } from "../../types/application";
 import { formatStatus } from "../../utils/formatters";
@@ -251,11 +253,21 @@ export function ApplicationForm({ onSubmit, initial }: ApplicationFormProps) {
             }
             className={inputCls}
           >
-            {APPLICATION_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {formatStatus(s)}
-              </option>
-            ))}
+            <optgroup label="Pre-Interview">
+              {PRE_INTERVIEW_STATUSES.map((s) => (
+                <option key={s} value={s}>{formatStatus(s)}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Active">
+              {ACTIVE_STATUSES.map((s) => (
+                <option key={s} value={s}>{formatStatus(s)}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Complete">
+              {COMPLETE_STATUSES.map((s) => (
+                <option key={s} value={s}>{formatStatus(s)}</option>
+              ))}
+            </optgroup>
           </select>
         </div>
         <div>

@@ -66,6 +66,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (state.tokens && state.isAuthenticated) {
+      if (window.gapi?.client) {
+        window.gapi.client.setToken({
+          access_token: state.tokens.accessToken,
+        });
+      }
       scheduleRefresh(state.tokens);
     }
     return () => {

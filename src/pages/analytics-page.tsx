@@ -2,24 +2,20 @@ import { useMemo } from "react";
 import { useApplications } from "../hooks/use-applications";
 import { useStorage } from "../hooks/use-storage";
 import type { Application, ApplicationStatus } from "../types/application";
+import { ACTIVE_STATUSES } from "../types/application";
 import { PageHeader } from "../components/shared/page-header";
 import { EmptyState } from "../components/shared/empty-state";
 import { LoadingSpinner } from "../components/shared/loading-spinner";
 import { SpreadsheetSetup } from "../components/dashboard/spreadsheet-setup";
 import { StatusDistributionChart } from "../components/charts/status-distribution-chart";
 import { ApplicationsTimelineChart } from "../components/charts/applications-timeline-chart";
-import { SalaryRangeChart } from "../components/charts/salary-range-chart";
-import { TopCompaniesChart } from "../components/charts/top-companies-chart";
-import { RemoteDistributionChart } from "../components/charts/remote-distribution-chart";
-import { InterestDistributionChart } from "../components/charts/interest-distribution-chart";
+import { ApplicationPipelineSankey } from "../components/charts/application-pipeline-sankey";
 
 const STATUS_COLORS: Record<ApplicationStatus, string> = {
   bookmarked: "#9ca3af",
-  applying: "#60a5fa",
   applied: "#818cf8",
   interviewing: "#fbbf24",
   offered: "#34d399",
-  accepted: "#10b981",
   rejected: "#f87171",
   withdrawn: "#fb923c",
   ghosted: "#a78bfa",
@@ -48,49 +44,6 @@ function buildTimelineData(apps: Application[]) {
     .map(([date, count]) => ({ date, count }));
 }
 
-function buildSalaryData(apps: Application[]) {
-  return apps
-    .filter((a) => a.salaryMin != null || a.salaryMax != null)
-    .slice(0, 15)
-    .map((a) => ({
-      label: `${a.companyName} - ${a.position}`.slice(0, 30),
-      min: a.salaryMin ?? 0,
-      max: a.salaryMax ?? 0,
-    }));
-}
-
-function buildCompanyData(apps: Application[]) {
-  const counts = new Map<string, number>();
-  for (const app of apps) {
-    counts.set(app.companyName, (counts.get(app.companyName) ?? 0) + 1);
-  }
-  return Array.from(counts.entries())
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 10)
-    .map(([label, value]) => ({ label, value }));
-}
-
-function buildRemoteData(apps: Application[]) {
-  const remote = apps.filter((a) => a.remote).length;
-  const onsite = apps.length - remote;
-  return [
-    { label: "Remote", value: remote, color: "#34d399" },
-    { label: "On-site", value: onsite, color: "#60a5fa" },
-  ];
-}
-
-function buildInterestData(apps: Application[]) {
-  const counts = { high: 0, medium: 0, low: 0 };
-  for (const app of apps) {
-    counts[app.interest]++;
-  }
-  return [
-    { label: "High", value: counts.high, color: "#10b981" },
-    { label: "Medium", value: counts.medium, color: "#fbbf24" },
-    { label: "Low", value: counts.low, color: "#f87171" },
-  ];
-}
-
 export function AnalyticsPage() {
   const { isConfigured } = useStorage();
   const { applications, isLoading } = useApplications();
@@ -100,10 +53,9 @@ export function AnalyticsPage() {
     return {
       status: buildStatusData(applications),
       timeline: buildTimelineData(applications),
-      salary: buildSalaryData(applications),
-      companies: buildCompanyData(applications),
-      remote: buildRemoteData(applications),
-      interest: buildInterestData(applications),
+      activeCount: applications.filter((a) =>
+        ACTIVE_STATUSES.includes(a.status),
+      ).length,
     };
   }, [applications]);
 
@@ -129,51 +81,43 @@ export function AnalyticsPage() {
         description={`Insights from ${applications.length} applications`}
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="space-y-6">
+        {/* Row 1: status pie + active count side by side */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <StatusDistributionChart
+              data={charts.status}
+              title="Status Distribution"
+              height={200}
+            />
+          </div>
+
+          <div className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-4">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-500">Active In Pipeline</p>
+              <p className="mt-1 text-5xl font-bold text-indigo-600">
+                {charts.activeCount}
+              </p>
+              <p className="mt-1 text-xs text-gray-400">interviewing</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Sankey pipeline */}
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <StatusDistributionChart
-            data={charts.status}
-            title="Status Distribution"
+          <ApplicationPipelineSankey
+            applications={applications}
+            title="Application Pipeline"
           />
         </div>
 
+        {/* Row 3: Timeline */}
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <RemoteDistributionChart
-            data={charts.remote}
-            title="Remote vs On-site"
-          />
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-2">
           <ApplicationsTimelineChart
             data={charts.timeline}
             title="Applications Over Time"
           />
         </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <TopCompaniesChart
-            data={charts.companies}
-            title="Top Companies"
-          />
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <InterestDistributionChart
-            data={charts.interest}
-            title="Interest Level"
-          />
-        </div>
-
-        {charts.salary.length > 0 && (
-          <div className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-2">
-            <SalaryRangeChart
-              data={charts.salary}
-              title="Salary Ranges"
-              height={Math.max(300, charts.salary.length * 40)}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

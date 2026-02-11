@@ -67,7 +67,11 @@ declare global {
             }): Promise<{
               result: {
                 sheets?: Array<{
-                  properties?: { sheetId?: number; title?: string };
+                  properties?: {
+                    sheetId?: number;
+                    title?: string;
+                    gridProperties?: { rowCount?: number; columnCount?: number };
+                  };
                 }>;
               };
             }>;
