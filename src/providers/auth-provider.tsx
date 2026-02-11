@@ -29,7 +29,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(() => {
     const user = sessionGet<AuthUser>(SESSION_KEY_USER);
     const tokens = sessionGet<AuthTokens>(SESSION_KEY_TOKENS);
-    const isValid = tokens != null && tokens.expiresAt > Date.now();
+    // Require at least 60s remaining — avoids restoring nearly-expired tokens
+    // that would cause 401s before the refresh timer fires.
+    const isValid =
+      tokens != null && tokens.expiresAt - Date.now() > 60 * 1000;
     return {
       user: isValid ? user : null,
       tokens: isValid ? tokens : null,

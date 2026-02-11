@@ -28,13 +28,24 @@ export interface TokenClientConfig {
   client_id: string;
   scope: string;
   callback: (response: GoogleTokenResponse) => void;
+  error_callback?: (error: { type: string; message?: string }) => void;
 }
 
 /* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   interface Window {
     gapi: {
-      load(api: string, callback: () => void): void;
+      load(
+        api: string,
+        callbackOrConfig:
+          | (() => void)
+          | {
+              callback: () => void;
+              onerror?: () => void;
+              timeout?: number;
+              ontimeout?: () => void;
+            },
+      ): void;
       client: {
         init(config: {
           apiKey: string;
