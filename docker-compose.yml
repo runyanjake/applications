@@ -13,6 +13,7 @@ services:
     networks:
       - traefik
     labels:
+      - traefik.enable=true
       - traefik.http.routers.workouts.rule=Host(`apply.whitney.rip`)
       - traefik.http.routers.workouts.tls=true
       - traefik.http.routers.workouts.tls.certresolver=lets-encrypt
