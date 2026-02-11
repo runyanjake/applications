@@ -33,7 +33,7 @@ export function parseExtractedJSON(
 
   // Strip ```json ... ``` or ``` ... ```
   const fenceMatch = cleaned.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  if (fenceMatch) {
+  if (fenceMatch?.[1]) {
     cleaned = fenceMatch[1].trim();
   }
 
