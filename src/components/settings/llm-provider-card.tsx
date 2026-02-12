@@ -131,7 +131,7 @@ export function LLMProviderCard() {
         {showBaseUrl && (
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              {isCustom ? "Server URL" : "Base URL"}
+              {isCustom ? "Chat Endpoint URL" : "Base URL"}
               {provider === "anthropic" && (
                 <span className="ml-1 text-xs font-normal text-red-500">
                   (required)
@@ -146,7 +146,7 @@ export function LLMProviderCard() {
                 provider === "anthropic"
                   ? "https://your-cors-proxy.example.com"
                   : provider === "custom"
-                    ? "http://localhost:1234/v1"
+                    ? "http://localhost:1234/api/v1/chat"
                     : "https://api.openai.com/v1"
               }
               className={inputCls}
@@ -164,8 +164,8 @@ export function LLMProviderCard() {
             )}
             {provider === "custom" && (
               <p className="mt-1 text-xs text-gray-500">
-                URL of your OpenAI-compatible server (e.g. LM Studio, Ollama, vLLM).
-                Should end with /v1 if your server follows the OpenAI convention.
+                Full URL to the chat completions endpoint on your server
+                (e.g. LM Studio, Ollama, vLLM).
               </p>
             )}
           </div>

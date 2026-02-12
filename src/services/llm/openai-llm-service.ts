@@ -7,12 +7,17 @@ import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 export class OpenAILLMService implements LLMService {
   private apiKey: string;
   private model: string;
-  private baseUrl: string;
+  private endpoint: string;
 
   constructor(config: LLMConfig) {
     this.apiKey = config.apiKey;
     this.model = config.model;
-    this.baseUrl = config.baseUrl || "https://api.openai.com/v1";
+    // For custom/self-hosted providers the user supplies the full endpoint URL
+    // (e.g. http://localhost:1234/api/v1/chat). For OpenAI we build it.
+    this.endpoint =
+      config.provider === "custom" && config.baseUrl
+        ? config.baseUrl
+        : `${config.baseUrl || "https://api.openai.com/v1"}/chat/completions`;
   }
 
   async extractApplicationData(
@@ -25,7 +30,7 @@ export class OpenAILLMService implements LLMService {
       headers["Authorization"] = `Bearer ${this.apiKey}`;
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await fetch(this.endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify({
