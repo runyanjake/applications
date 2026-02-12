@@ -30,7 +30,7 @@ export function LLMProviderCard() {
   const handleProviderChange = (p: LLMProvider) => {
     setProvider(p);
     setModel(DEFAULT_MODELS[p]);
-    setBaseUrl("");
+    setBaseUrl(p === "custom" ? "http://localhost:1234/v1/chat/completions" : "");
   };
 
   const handleSave = () => {
@@ -146,7 +146,7 @@ export function LLMProviderCard() {
                 provider === "anthropic"
                   ? "https://your-cors-proxy.example.com"
                   : provider === "custom"
-                    ? "http://localhost:1234/api/v1/chat"
+                    ? "http://localhost:1234/v1/chat/completions"
                     : "https://api.openai.com/v1"
               }
               className={inputCls}
