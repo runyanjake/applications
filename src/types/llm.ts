@@ -10,7 +10,7 @@ export const PROVIDER_LABELS: Record<LLMProvider, string> = {
 };
 
 export const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  gemini: "gemini-2.0-flash",
+  gemini: "gemini-2.5-flash-lite",
   openai: "gpt-4o-mini",
   anthropic: "claude-sonnet-4-5-20250929",
   custom: "",
