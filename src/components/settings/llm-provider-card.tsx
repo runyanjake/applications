@@ -60,7 +60,7 @@ export function LLMProviderCard() {
   const needsBaseUrl = provider === "anthropic" || isCustom;
 
   const canSave = isCustom
-    ? baseUrl.trim().length > 0
+    ? baseUrl.trim().length > 0 && model.trim().length > 0
     : apiKey.trim().length > 0 && model.trim().length > 0 &&
       (!needsBaseUrl || baseUrl.trim().length > 0);
 
@@ -100,33 +100,32 @@ export function LLMProviderCard() {
         </div>
 
         {!isCustom && (
-          <>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                API Key
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter your API key"
-                className={inputCls}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Model
-              </label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className={inputCls}
-              />
-            </div>
-          </>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              API Key
+            </label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter your API key"
+              className={inputCls}
+            />
+          </div>
         )}
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Model
+          </label>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={isCustom ? "Model name loaded on your server" : undefined}
+            className={inputCls}
+          />
+        </div>
 
         {showBaseUrl && (
           <div>
