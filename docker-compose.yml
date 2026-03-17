@@ -4,6 +4,7 @@ networks:
 
 services:
   app:
+    container_name: applications
     build:
       context: .
       args:
