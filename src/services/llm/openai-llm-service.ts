@@ -4,6 +4,32 @@ import type { LLMService } from "./llm-service";
 import { parseExtractedJSON } from "./llm-service";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
+const responseFormat = {
+  type: "json_schema",
+  json_schema: {
+    name: "job_posting_extraction",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        position:       { type: "string" },
+        companyName:    { type: "string" },
+        companyWebsite: { type: "string" },
+        city:           { type: "string" },
+        state:          { type: "string" },
+        country:        { type: "string" },
+        remote:         { type: "boolean" },
+        salaryMin:      { type: "number" },
+        salaryMax:      { type: "number" },
+        currency:       { type: "string", enum: ["USD", "EUR", "GBP", "CAD", "AUD", "INR", "OTHER"] },
+        notes:          { type: "string" },
+      },
+      required: ["notes"],
+      additionalProperties: false,
+    },
+  },
+};
+
 export class OpenAILLMService implements LLMService {
   private apiKey: string;
   private model: string;
@@ -40,6 +66,8 @@ export class OpenAILLMService implements LLMService {
           { role: "user", content: input },
         ],
         temperature: 0,
+        enable_thinking: false,
+        response_format: responseFormat,
       }),
     });
 

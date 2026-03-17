@@ -31,11 +31,34 @@ export function parseExtractedJSON(
 ): Partial<ApplicationFormData> {
   let cleaned = text.trim();
 
+  // Strip <think>...</think> blocks produced by reasoning/thinking models
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
   // Strip ```json ... ``` or ``` ... ```
-  const fenceMatch = cleaned.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (fenceMatch?.[1]) {
     cleaned = fenceMatch[1].trim();
+  } else {
+    // For thinking models that prepend reasoning before the JSON,
+    // find the outermost JSON object by scanning from the last closing brace
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (lastBrace !== -1) {
+      let depth = 0;
+      let start = -1;
+      for (let i = lastBrace; i >= 0; i--) {
+        if (cleaned[i] === "}") depth++;
+        else if (cleaned[i] === "{") {
+          depth--;
+          if (depth === 0) { start = i; break; }
+        }
+      }
+      if (start !== -1) {
+        cleaned = cleaned.slice(start, lastBrace + 1).trim();
+      }
+    }
   }
+
+  console.log("[LLM] Raw response:", text);
 
   const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
@@ -52,6 +75,9 @@ export function parseExtractedJSON(
   if (typeof parsed.salaryMin === "number") result.salaryMin = parsed.salaryMin;
   if (typeof parsed.salaryMax === "number") result.salaryMax = parsed.salaryMax;
   if (typeof parsed.currency === "string") result.currency = parsed.currency as ApplicationFormData["currency"];
+  if (typeof parsed.notes === "string") result.notes = parsed.notes;
+
+  console.log("[LLM] Parsed result:", result);
 
   return result;
 }
