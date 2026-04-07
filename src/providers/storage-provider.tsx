@@ -11,7 +11,10 @@ import type { StorageService } from "../types/storage";
 import { createStorageService } from "../services/storage/storage-service";
 import { openSpreadsheetPicker } from "../services/picker/google-picker-service";
 import { useAuth } from "../hooks/use-auth";
-import { sessionClear, sessionGet, sessionSet } from "../utils/session-store";
+import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
+
+// Keys owned by ApplicationProvider — cleared when the spreadsheet is disconnected
+const APP_SESSION_KEYS = ["applications", "sync-state"] as const;
 
 interface SpreadsheetInfo {
   id: string;
@@ -63,15 +66,18 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     ) {
       hasPrompted.current = true;
       openSpreadsheetPicker(authState.tokens.accessToken).then((doc) => {
-        if (doc) {
-          const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
-          sessionSet(SESSION_KEY, info);
-          setSpreadsheet(info);
-          service.current.configure({
-            spreadsheetId: info.id,
-            sheetName: "Applications",
-          });
+        if (!doc) {
+          // Picker was cancelled — allow it to re-open if the user navigates to Settings
+          hasPrompted.current = false;
+          return;
         }
+        const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
+        sessionSet(SESSION_KEY, info);
+        setSpreadsheet(info);
+        service.current.configure({
+          spreadsheetId: info.id,
+          sheetName: "Applications",
+        });
       });
     }
   }, [authState.isAuthenticated, authState.tokens, spreadsheet]);
@@ -119,18 +125,25 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   }, [pendingSheetCreation]);
 
   const cancelSheetCreation = useCallback(() => {
-    // Revert service config to the previously active spreadsheet (if any)
     if (spreadsheet) {
+      // Revert service to the previously active spreadsheet
       service.current.configure({
         spreadsheetId: spreadsheet.id,
         sheetName: "Applications",
       });
+    } else {
+      // No previous spreadsheet — fully reset so the user is back to unconfigured
+      service.current.configure({ spreadsheetId: "", sheetName: "Applications" });
+      sessionRemove(SESSION_KEY);
+      APP_SESSION_KEYS.forEach(sessionRemove);
     }
     setPendingSheetCreation(null);
   }, [spreadsheet]);
 
   const clearSpreadsheet = useCallback(() => {
-    sessionClear();
+    sessionRemove(SESSION_KEY);
+    APP_SESSION_KEYS.forEach(sessionRemove);
+    service.current.configure({ spreadsheetId: "", sheetName: "Applications" });
     setSpreadsheet(null);
     setValidationError(null);
   }, []);
