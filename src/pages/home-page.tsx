@@ -4,7 +4,7 @@ export function HomePage() {
   return (
     <div className="py-16 text-center">
       <h1 className="mb-4 text-4xl font-bold text-gray-900">
-        Job Application Tracker
+        PWS Applications
       </h1>
       <p className="mx-auto mb-8 max-w-2xl text-lg text-gray-600">
         Track your job applications with your own Google Spreadsheet. Your data

@@ -4,4 +4,5 @@ export const ROUTES = {
   ANALYTICS: "/analytics",
   ADD: "/add",
   SETTINGS: "/settings",
+  REPORT: "/report",
 } as const;

@@ -9,6 +9,7 @@ import { ApplicationsPage } from "./pages/applications-page";
 import { AnalyticsPage } from "./pages/analytics-page";
 import { AddApplicationPage } from "./pages/add-application-page";
 import { SettingsPage } from "./pages/settings-page";
+import { ReportPage } from "./pages/report-page";
 
 export function App() {
   return (
@@ -40,6 +41,10 @@ export function App() {
           <Route
             path={ROUTES.SETTINGS}
             element={<SettingsPage />}
+          />
+          <Route
+            path={ROUTES.REPORT}
+            element={<ReportPage />}
           />
         </Route>
 
