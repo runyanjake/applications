@@ -11,7 +11,7 @@ import type { StorageService } from "../types/storage";
 import { createStorageService } from "../services/storage/storage-service";
 import { openSpreadsheetPicker } from "../services/picker/google-picker-service";
 import { useAuth } from "../hooks/use-auth";
-import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
+import { sessionClear, sessionGet, sessionSet } from "../utils/session-store";
 
 interface SpreadsheetInfo {
   id: string;
@@ -22,8 +22,12 @@ interface StorageContextValue {
   isConfigured: boolean;
   spreadsheet: SpreadsheetInfo | null;
   storageService: StorageService;
+  validationError: string | null;
+  pendingSheetCreation: SpreadsheetInfo | null;
   pickSpreadsheet: () => Promise<void>;
   clearSpreadsheet: () => void;
+  confirmSheetCreation: () => Promise<void>;
+  cancelSheetCreation: () => void;
 }
 
 export const StorageContext = createContext<StorageContextValue | null>(null);
@@ -37,6 +41,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const [spreadsheet, setSpreadsheet] = useState<SpreadsheetInfo | null>(
     () => sessionGet<SpreadsheetInfo>(SESSION_KEY),
   );
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [pendingSheetCreation, setPendingSheetCreation] = useState<SpreadsheetInfo | null>(null);
   const hasPrompted = useRef(false);
 
   useEffect(() => {
@@ -73,20 +79,60 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const pickSpreadsheet = useCallback(async () => {
     if (!authState.tokens) return;
     const doc = await openSpreadsheetPicker(authState.tokens.accessToken);
-    if (doc) {
-      const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
-      sessionSet(SESSION_KEY, info);
-      setSpreadsheet(info);
+    if (!doc) return;
+
+    // Configure temporarily so we can validate against this spreadsheet
+    service.current.configure({ spreadsheetId: doc.id, sheetName: "Applications" });
+    const result = await service.current.validateStructure();
+
+    if (!result.valid) {
+      // Revert service to the previous spreadsheet (if any)
+      if (spreadsheet) {
+        service.current.configure({
+          spreadsheetId: spreadsheet.id,
+          sheetName: "Applications",
+        });
+      }
+      setValidationError(result.error ?? "Invalid spreadsheet.");
+      return;
+    }
+
+    if (result.needsSheetCreation) {
+      // Hold the pick in pending state — wait for user confirmation
+      setPendingSheetCreation({ id: doc.id, name: doc.name });
+      return;
+    }
+
+    setValidationError(null);
+    const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
+    sessionSet(SESSION_KEY, info);
+    setSpreadsheet(info);
+  }, [authState.tokens, spreadsheet]);
+
+  const confirmSheetCreation = useCallback(async () => {
+    if (!pendingSheetCreation) return;
+    await service.current.createApplicationsSheet();
+    setValidationError(null);
+    setPendingSheetCreation(null);
+    sessionSet(SESSION_KEY, pendingSheetCreation);
+    setSpreadsheet(pendingSheetCreation);
+  }, [pendingSheetCreation]);
+
+  const cancelSheetCreation = useCallback(() => {
+    // Revert service config to the previously active spreadsheet (if any)
+    if (spreadsheet) {
       service.current.configure({
-        spreadsheetId: info.id,
+        spreadsheetId: spreadsheet.id,
         sheetName: "Applications",
       });
     }
-  }, [authState.tokens]);
+    setPendingSheetCreation(null);
+  }, [spreadsheet]);
 
   const clearSpreadsheet = useCallback(() => {
-    sessionRemove(SESSION_KEY);
+    sessionClear();
     setSpreadsheet(null);
+    setValidationError(null);
   }, []);
 
   const value = useMemo(
@@ -94,10 +140,14 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       isConfigured: spreadsheet != null,
       spreadsheet,
       storageService: service.current,
+      validationError,
+      pendingSheetCreation,
       pickSpreadsheet,
       clearSpreadsheet,
+      confirmSheetCreation,
+      cancelSheetCreation,
     }),
-    [spreadsheet, pickSpreadsheet, clearSpreadsheet],
+    [spreadsheet, validationError, pendingSheetCreation, pickSpreadsheet, clearSpreadsheet, confirmSheetCreation, cancelSheetCreation],
   );
 
   return (

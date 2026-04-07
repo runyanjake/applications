@@ -14,7 +14,7 @@ import type {
 } from "../types/application";
 import { useStorage } from "../hooks/use-storage";
 import { generateId } from "../utils/id";
-import { sessionGet, sessionSet } from "../utils/session-store";
+import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
 import {
   computeVersion,
   shouldAutoSync,
@@ -42,7 +42,7 @@ const SESSION_KEY = "applications";
 const SYNC_STATE_KEY = "sync-state";
 
 export function ApplicationProvider({ children }: { children: ReactNode }) {
-  const { storageService, isConfigured } = useStorage();
+  const { storageService, isConfigured, spreadsheet } = useStorage();
   const [applications, setApplications] = useState<Application[]>(
     () => sessionGet<Application[]>(SESSION_KEY) ?? [],
   );
@@ -91,11 +91,15 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     sessionSet(SYNC_STATE_KEY, next);
   }, []);
 
-  // Initial load from sheet
+  // Load (or clear) whenever the active spreadsheet changes
   useEffect(() => {
-    if (!isConfigured) return;
-    const cached = sessionGet<Application[]>(SESSION_KEY);
-    if (cached && cached.length > 0) return;
+    if (!isConfigured) {
+      setApplications([]);
+      sessionRemove(SESSION_KEY);
+      setSyncState(INITIAL_SYNC_STATE);
+      sessionRemove(SYNC_STATE_KEY);
+      return;
+    }
     setIsLoading(true);
     storageService.getAll().then(
       (apps) => {
@@ -109,7 +113,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       },
     );
-  }, [isConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [spreadsheet?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync: read remote version, compare, write if safe
   const sync = useCallback(async () => {

@@ -1,5 +1,5 @@
 import type { Application } from "../../types/application";
-import type { StorageConfig, StorageService } from "../../types/storage";
+import type { StorageConfig, StorageService, ValidationResult } from "../../types/storage";
 import {
   HEADER_ROW,
   applicationToRow,
@@ -17,6 +17,55 @@ export class GoogleSheetsService implements StorageService {
 
   isConfigured(): boolean {
     return !!this.spreadsheetId;
+  }
+
+  async validateStructure(): Promise<ValidationResult> {
+    try {
+      const res = await window.gapi.client.sheets.spreadsheets.get({
+        spreadsheetId: this.spreadsheetId,
+      });
+      const sheets = res.result.sheets ?? [];
+      const appSheet = sheets.find(
+        (s) => s.properties?.title === this.sheetName,
+      );
+
+      if (!appSheet) {
+        return { valid: true, needsSheetCreation: true };
+      }
+
+      // Sheet exists — if it has data, verify the header row
+      const headerRes = await window.gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: this.spreadsheetId,
+        range: `${this.sheetName}!A1:A1`,
+      });
+      const firstCell = headerRes.result.values?.[0]?.[0];
+
+      if (firstCell && firstCell !== HEADER_ROW[0]) {
+        return {
+          valid: false,
+          error: `The "${this.sheetName}" sheet doesn't look like a PWS Applications sheet — expected column A to be "${HEADER_ROW[0]}", found "${firstCell}". Please select the correct spreadsheet.`,
+        };
+      }
+
+      return { valid: true };
+    } catch (err) {
+      return {
+        valid: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Could not access the spreadsheet.",
+      };
+    }
+  }
+
+  async createApplicationsSheet(): Promise<void> {
+    await window.gapi.client.sheets.spreadsheets.batchUpdate({
+      spreadsheetId: this.spreadsheetId,
+      resource: {
+        requests: [{ addSheet: { properties: { title: this.sheetName } } }],
+      },
+    });
   }
 
   async getAll(): Promise<Application[]> {
