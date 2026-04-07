@@ -13,7 +13,7 @@ import { openSpreadsheetPicker } from "../services/picker/google-picker-service"
 import { useAuth } from "../hooks/use-auth";
 import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
 
-// Keys owned by ApplicationProvider — cleared when the spreadsheet is disconnected
+// Session keys owned by ApplicationProvider — cleared whenever the spreadsheet changes or disconnects
 const APP_SESSION_KEYS = ["applications", "sync-state"] as const;
 
 interface SpreadsheetInfo {
@@ -37,6 +37,22 @@ export const StorageContext = createContext<StorageContextValue | null>(null);
 
 const SESSION_KEY = "storage:spreadsheet";
 
+/** Configure the service and persist the spreadsheet info to session. */
+function commitSpreadsheet(
+  service: StorageService,
+  info: SpreadsheetInfo,
+): void {
+  service.configure({ spreadsheetId: info.id, sheetName: "Applications" });
+  sessionSet(SESSION_KEY, info);
+}
+
+/** Reset the service and clear all app-related session data. */
+function resetService(service: StorageService): void {
+  service.configure({ spreadsheetId: "", sheetName: "Applications" });
+  sessionRemove(SESSION_KEY);
+  APP_SESSION_KEYS.forEach(sessionRemove);
+}
+
 export function StorageProvider({ children }: { children: ReactNode }) {
   const { state: authState } = useAuth();
   const service = useRef(createStorageService());
@@ -48,6 +64,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const [pendingSheetCreation, setPendingSheetCreation] = useState<SpreadsheetInfo | null>(null);
   const hasPrompted = useRef(false);
 
+  // Keep main service in sync with committed spreadsheet state
   useEffect(() => {
     if (spreadsheet) {
       service.current.configure({
@@ -57,6 +74,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     }
   }, [spreadsheet]);
 
+  // Auto-open picker once on login when no spreadsheet is configured
   useEffect(() => {
     if (
       authState.isAuthenticated &&
@@ -65,19 +83,28 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       !hasPrompted.current
     ) {
       hasPrompted.current = true;
-      openSpreadsheetPicker(authState.tokens.accessToken).then((doc) => {
+      openSpreadsheetPicker(authState.tokens.accessToken).then(async (doc) => {
         if (!doc) {
-          // Picker was cancelled — allow it to re-open if the user navigates to Settings
           hasPrompted.current = false;
           return;
         }
+        // Validate using a temp service so main service is untouched until committed
+        const temp = createStorageService();
+        temp.configure({ spreadsheetId: doc.id, sheetName: "Applications" });
+        const result = await temp.validateStructure();
+
+        if (!result.valid) {
+          setValidationError(result.error ?? "Invalid spreadsheet.");
+          return;
+        }
+        if (result.needsSheetCreation) {
+          setPendingSheetCreation({ id: doc.id, name: doc.name });
+          return;
+        }
+
         const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
-        sessionSet(SESSION_KEY, info);
+        commitSpreadsheet(service.current, info);
         setSpreadsheet(info);
-        service.current.configure({
-          spreadsheetId: info.id,
-          sheetName: "Applications",
-        });
       });
     }
   }, [authState.isAuthenticated, authState.tokens, spreadsheet]);
@@ -87,36 +114,36 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     const doc = await openSpreadsheetPicker(authState.tokens.accessToken);
     if (!doc) return;
 
-    // Configure temporarily so we can validate against this spreadsheet
-    service.current.configure({ spreadsheetId: doc.id, sheetName: "Applications" });
-    const result = await service.current.validateStructure();
+    // Validate with a temporary service — main service is never touched until we commit
+    const temp = createStorageService();
+    temp.configure({ spreadsheetId: doc.id, sheetName: "Applications" });
+    const result = await temp.validateStructure();
 
     if (!result.valid) {
-      // Revert service to the previous spreadsheet (if any)
-      if (spreadsheet) {
-        service.current.configure({
-          spreadsheetId: spreadsheet.id,
-          sheetName: "Applications",
-        });
-      }
       setValidationError(result.error ?? "Invalid spreadsheet.");
       return;
     }
 
     if (result.needsSheetCreation) {
-      // Hold the pick in pending state — wait for user confirmation
+      setValidationError(null);
       setPendingSheetCreation({ id: doc.id, name: doc.name });
       return;
     }
 
+    // Valid — commit and trigger reload in ApplicationProvider
     setValidationError(null);
     const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
-    sessionSet(SESSION_KEY, info);
+    commitSpreadsheet(service.current, info);
     setSpreadsheet(info);
-  }, [authState.tokens, spreadsheet]);
+  }, [authState.tokens]);
 
   const confirmSheetCreation = useCallback(async () => {
     if (!pendingSheetCreation) return;
+    // Now it is safe to configure the main service and create the sheet
+    service.current.configure({
+      spreadsheetId: pendingSheetCreation.id,
+      sheetName: "Applications",
+    });
     await service.current.createApplicationsSheet();
     setValidationError(null);
     setPendingSheetCreation(null);
@@ -125,27 +152,20 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   }, [pendingSheetCreation]);
 
   const cancelSheetCreation = useCallback(() => {
-    if (spreadsheet) {
-      // Revert service to the previously active spreadsheet
-      service.current.configure({
-        spreadsheetId: spreadsheet.id,
-        sheetName: "Applications",
-      });
-    } else {
-      // No previous spreadsheet — fully reset so the user is back to unconfigured
-      service.current.configure({ spreadsheetId: "", sheetName: "Applications" });
-      sessionRemove(SESSION_KEY);
-      APP_SESSION_KEYS.forEach(sessionRemove);
+    // Main service was never reconfigured, so nothing to revert there.
+    // If there was no previous spreadsheet, clear any stale app session data.
+    if (!spreadsheet) {
+      resetService(service.current);
     }
     setPendingSheetCreation(null);
+    setValidationError(null);
   }, [spreadsheet]);
 
   const clearSpreadsheet = useCallback(() => {
-    sessionRemove(SESSION_KEY);
-    APP_SESSION_KEYS.forEach(sessionRemove);
-    service.current.configure({ spreadsheetId: "", sheetName: "Applications" });
+    resetService(service.current);
     setSpreadsheet(null);
     setValidationError(null);
+    setPendingSheetCreation(null);
   }, []);
 
   const value = useMemo(
@@ -160,7 +180,15 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       confirmSheetCreation,
       cancelSheetCreation,
     }),
-    [spreadsheet, validationError, pendingSheetCreation, pickSpreadsheet, clearSpreadsheet, confirmSheetCreation, cancelSheetCreation],
+    [
+      spreadsheet,
+      validationError,
+      pendingSheetCreation,
+      pickSpreadsheet,
+      clearSpreadsheet,
+      confirmSheetCreation,
+      cancelSheetCreation,
+    ],
   );
 
   return (
