@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useApplications } from "../hooks/use-applications";
 import { useStorage } from "../hooks/use-storage";
 import type { Application, ApplicationStatus } from "../types/application";
-import { ACTIVE_STATUSES, APPLICATION_STATUSES } from "../types/application";
+import { ACTIVE_STATUSES } from "../types/application";
 import { PageHeader } from "../components/shared/page-header";
 import { EmptyState } from "../components/shared/empty-state";
 import { LoadingSpinner } from "../components/shared/loading-spinner";
