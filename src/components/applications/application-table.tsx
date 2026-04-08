@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Application, ApplicationStatus } from "../../types/application";
+import type { Application, ApplicationFormData, ApplicationStatus } from "../../types/application";
 import {
   STATUS_TRANSITIONS,
   STATUS_CATEGORY,
@@ -7,6 +7,7 @@ import {
 import { formatDate, formatSalary, formatStatus } from "../../utils/formatters";
 import { StatusBadge } from "./status-badge";
 import { useApplications } from "../../hooks/use-applications";
+import { ApplicationForm } from "./application-form";
 
 interface ApplicationTableProps {
   applications: Application[];
@@ -29,6 +30,7 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
   const [sortField, setSortField] = useState<SortField>("dateApplied");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -49,13 +51,15 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
   const SortHeader = ({
     field,
     children,
+    className = "",
   }: {
     field: SortField;
     children: React.ReactNode;
+    className?: string;
   }) => (
     <th
       onClick={() => handleSort(field)}
-      className="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:text-gray-700"
+      className={`cursor-pointer px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:text-gray-700 ${className}`}
     >
       <span className="inline-flex items-center gap-1">
         {children}
@@ -66,122 +70,185 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
     </th>
   );
 
-  const ColHeader = ({ children }: { children: React.ReactNode }) => (
-    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+  const ColHeader = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+    <th className={`px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 ${className}`}>
       {children}
     </th>
   );
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
+    <div className="rounded-lg border border-gray-200 bg-white">
+      <table className="w-full table-fixed divide-y divide-gray-200">
+        <colgroup>
+          <col className="w-[22%]" />  {/* Position / Company */}
+          <col className="w-[11%]" />  {/* Location */}
+          <col className="w-[10%]" />  {/* Salary */}
+          <col className="w-[7%]" />   {/* Interest */}
+          <col className="w-[13%]" />  {/* Status */}
+          <col className="w-[8%]" />   {/* Applied */}
+          <col className="w-[18%]" />  {/* Notes */}
+          <col className="w-[11%]" />  {/* Actions */}
+        </colgroup>
         <thead className="bg-gray-50">
           <tr>
-            <SortHeader field="position">Position</SortHeader>
-            <SortHeader field="companyName">Company</SortHeader>
+            <SortHeader field="position">Role / Company</SortHeader>
             <ColHeader>Location</ColHeader>
             <ColHeader>Salary</ColHeader>
             <ColHeader>Interest</ColHeader>
             <SortHeader field="status">Status</SortHeader>
             <SortHeader field="dateApplied">Applied</SortHeader>
             <ColHeader>Notes</ColHeader>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th className="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
               Actions
             </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
           {sorted.map((app) => (
-            <tr key={app.id} className="hover:bg-gray-50">
-              {/* Position + job posting link */}
-              <td className="whitespace-nowrap px-4 py-3">
-                <div className="text-sm font-medium text-gray-900">
-                  {app.position}
-                </div>
-                {app.jobPostingUrl && (
-                  <a
-                    href={app.jobPostingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-indigo-500 hover:underline"
+            <>
+              <tr key={app.id} className="hover:bg-gray-50">
+                {/* Position + Company (stacked) */}
+                <td className="px-3 py-3">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <span
+                      className="truncate text-sm font-medium text-gray-900"
+                      title={app.position}
+                    >
+                      {app.position}
+                    </span>
+                    {app.jobPostingUrl && (
+                      <a
+                        href={app.jobPostingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-indigo-400 hover:text-indigo-600"
+                        title="View job posting"
+                      >
+                        ↗
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <span
+                      className="truncate text-xs text-gray-500"
+                      title={app.companyName}
+                    >
+                      {app.companyName}
+                    </span>
+                    {app.companyWebsite && (
+                      <a
+                        href={app.companyWebsite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-xs text-indigo-400 hover:text-indigo-600"
+                        title="Company website"
+                      >
+                        ↗
+                      </a>
+                    )}
+                  </div>
+                </td>
+
+                {/* Location */}
+                <td className="px-3 py-3">
+                  <span
+                    className="block truncate text-sm text-gray-600"
+                    title={formatLocation(app)}
                   >
-                    View posting
-                  </a>
-                )}
-              </td>
+                    {formatLocation(app)}
+                  </span>
+                </td>
 
-              {/* Company + website */}
-              <td className="whitespace-nowrap px-4 py-3">
-                <div className="text-sm text-gray-900">{app.companyName}</div>
-                {app.companyWebsite && (
-                  <a
-                    href={app.companyWebsite}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-indigo-500 hover:underline"
+                {/* Salary */}
+                <td className="px-3 py-3">
+                  <span
+                    className="block truncate text-sm text-gray-600"
+                    title={formatSalary(app.salaryMin, app.salaryMax, app.currency)}
                   >
-                    Website
-                  </a>
-                )}
-              </td>
+                    {formatSalary(app.salaryMin, app.salaryMax, app.currency)}
+                  </span>
+                </td>
 
-              {/* Location */}
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                {formatLocation(app)}
-              </td>
+                {/* Interest */}
+                <td className="px-3 py-3">
+                  <InterestBadge interest={app.interest} />
+                </td>
 
-              {/* Salary */}
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                {formatSalary(app.salaryMin, app.salaryMax, app.currency)}
-              </td>
+                {/* Status (inline edit) */}
+                <td className="px-3 py-3">
+                  {editingStatus === app.id ? (
+                    <StatusSelect
+                      current={app.status}
+                      onChange={(s) => {
+                        updateApplication(app.id, { status: s });
+                        setEditingStatus(null);
+                      }}
+                      onBlur={() => setEditingStatus(null)}
+                    />
+                  ) : (
+                    <button onClick={() => setEditingStatus(app.id)}>
+                      <StatusBadge status={app.status} />
+                    </button>
+                  )}
+                </td>
 
-              {/* Interest */}
-              <td className="whitespace-nowrap px-4 py-3">
-                <InterestBadge interest={app.interest} />
-              </td>
+                {/* Date Applied */}
+                <td className="px-3 py-3 text-sm text-gray-500">
+                  {formatDate(app.dateApplied)}
+                </td>
 
-              {/* Status (inline edit) */}
-              <td className="whitespace-nowrap px-4 py-3">
-                {editingStatus === app.id ? (
-                  <StatusSelect
-                    current={app.status}
-                    onChange={(s) => {
-                      updateApplication(app.id, { status: s });
-                      setEditingStatus(null);
-                    }}
-                    onBlur={() => setEditingStatus(null)}
-                  />
-                ) : (
-                  <button onClick={() => setEditingStatus(app.id)}>
-                    <StatusBadge status={app.status} />
-                  </button>
-                )}
-              </td>
+                {/* Notes */}
+                <td className="px-3 py-3">
+                  <span
+                    className="block truncate text-sm text-gray-500"
+                    title={app.notes || undefined}
+                  >
+                    {app.notes || "—"}
+                  </span>
+                </td>
 
-              {/* Date Applied */}
-              <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                {formatDate(app.dateApplied)}
-              </td>
-
-              {/* Notes (truncated) */}
-              <td className="max-w-[200px] truncate px-4 py-3 text-sm text-gray-500" title={app.notes}>
-                {app.notes || "—"}
-              </td>
-
-              {/* Actions */}
-              <td className="whitespace-nowrap px-4 py-3 text-right">
-                <button
-                  onClick={() => {
-                    if (window.confirm("Delete this application?")) {
-                      deleteApplication(app.id);
-                    }
-                  }}
-                  className="text-sm text-red-500 hover:text-red-700"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
+                {/* Actions */}
+                <td className="px-3 py-3 text-right">
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => setEditingId(editingId === app.id ? null : app.id)}
+                      className="text-sm text-indigo-500 hover:text-indigo-700"
+                    >
+                      {editingId === app.id ? "Close" : "Edit"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Delete this application?")) {
+                          deleteApplication(app.id);
+                        }
+                      }}
+                      className="text-sm text-red-500 hover:text-red-700"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              {editingId === app.id && (
+                <tr key={`${app.id}-edit`}>
+                  <td colSpan={8} className="bg-gray-50 px-6 py-4">
+                    <div className="rounded-lg border border-indigo-100 bg-white p-6 shadow-sm">
+                      <h3 className="mb-4 text-sm font-semibold text-gray-700">
+                        Edit Application
+                      </h3>
+                      <ApplicationForm
+                        initial={app}
+                        submitLabel="Save Changes"
+                        onCancel={() => setEditingId(null)}
+                        onSubmit={async (data: ApplicationFormData) => {
+                          updateApplication(app.id, data);
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </>
           ))}
         </tbody>
       </table>
@@ -241,7 +308,7 @@ function StatusSelect({
       autoFocus
       onBlur={onBlur}
       onChange={(e) => onChange(e.target.value as ApplicationStatus)}
-      className="rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+      className="w-full rounded border border-gray-300 px-1.5 py-0.5 text-xs"
     >
       {Array.from(groups.entries()).map(([cat, statuses]) => (
         <optgroup key={cat} label={CATEGORY_LABELS[cat] ?? cat}>

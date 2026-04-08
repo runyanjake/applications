@@ -18,6 +18,8 @@ import { LLMFillButton } from "./llm-fill-button";
 interface ApplicationFormProps {
   onSubmit: (data: ApplicationFormData) => Promise<void>;
   initial?: Partial<ApplicationFormData>;
+  submitLabel?: string;
+  onCancel?: () => void;
 }
 
 const EMPTY_FORM: ApplicationFormData = {
@@ -38,7 +40,7 @@ const EMPTY_FORM: ApplicationFormData = {
   dateApplied: new Date().toISOString().slice(0, 10),
 };
 
-export function ApplicationForm({ onSubmit, initial }: ApplicationFormProps) {
+export function ApplicationForm({ onSubmit, initial, submitLabel, onCancel }: ApplicationFormProps) {
   const [form, setForm] = useState<ApplicationFormData>({
     ...EMPTY_FORM,
     ...initial,
@@ -60,8 +62,12 @@ export function ApplicationForm({ onSubmit, initial }: ApplicationFormProps) {
     setSubmitting(true);
     try {
       await onSubmit(form);
-      setForm({ ...EMPTY_FORM, dateApplied: new Date().toISOString().slice(0, 10) });
-      setErrors({});
+      if (onCancel) {
+        onCancel();
+      } else {
+        setForm({ ...EMPTY_FORM, dateApplied: new Date().toISOString().slice(0, 10) });
+        setErrors({});
+      }
     } finally {
       setSubmitting(false);
     }
@@ -316,13 +322,23 @@ export function ApplicationForm({ onSubmit, initial }: ApplicationFormProps) {
         />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        )}
         <button
           type="submit"
           disabled={submitting}
           className="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
         >
-          {submitting ? "Saving..." : "Add Application"}
+          {submitting ? "Saving..." : (submitLabel ?? "Add Application")}
         </button>
       </div>
     </form>
