@@ -11,6 +11,11 @@ import { StatusDistributionChart } from "../components/charts/status-distributio
 import { ApplicationsTimelineChart } from "../components/charts/applications-timeline-chart";
 import { ApplicationPipelineSankey } from "../components/charts/application-pipeline-sankey";
 
+const COMPANY_PALETTE = [
+  "#818cf8", "#34d399", "#fbbf24", "#f87171", "#60a5fa",
+  "#a78bfa", "#fb923c", "#2dd4bf", "#e879f9", "#94a3b8",
+];
+
 const STATUS_COLORS: Record<ApplicationStatus, string> = {
   bookmarked: "#9ca3af",
   applied: "#818cf8",
@@ -33,6 +38,24 @@ function buildStatusData(apps: Application[]) {
   }));
 }
 
+function buildCompanyData(apps: Application[]) {
+  const counts = new Map<string, number>();
+  for (const app of apps) {
+    const name = app.companyName || "Unknown";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  // Top 9 companies + "Other" bucket
+  const top = sorted.slice(0, 9);
+  const otherCount = sorted.slice(9).reduce((sum, [, n]) => sum + n, 0);
+  const entries = otherCount > 0 ? [...top, ["Other", otherCount] as [string, number]] : top;
+  return entries.map(([name, value], i) => ({
+    label: name,
+    value,
+    color: COMPANY_PALETTE[i % COMPANY_PALETTE.length],
+  }));
+}
+
 function buildTimelineData(apps: Application[]) {
   const counts = new Map<string, number>();
   for (const app of apps) {
@@ -52,6 +75,7 @@ export function AnalyticsPage() {
     if (applications.length === 0) return null;
     return {
       status: buildStatusData(applications),
+      company: buildCompanyData(applications),
       timeline: buildTimelineData(applications),
       activeCount: applications.filter((a) =>
         ACTIVE_STATUSES.includes(a.status),
@@ -82,8 +106,8 @@ export function AnalyticsPage() {
       />
 
       <div className="space-y-6">
-        {/* Row 1: status pie + active count side by side */}
-        <div className="grid gap-6 sm:grid-cols-2">
+        {/* Row 1: status pie + active count + company pie */}
+        <div className="grid gap-6 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <StatusDistributionChart
               data={charts.status}
@@ -100,6 +124,14 @@ export function AnalyticsPage() {
               </p>
               <p className="mt-1 text-xs text-gray-400">interviewing</p>
             </div>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <StatusDistributionChart
+              data={charts.company}
+              title="By Company"
+              height={200}
+            />
           </div>
         </div>
 
