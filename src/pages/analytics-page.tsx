@@ -56,46 +56,50 @@ function buildCompanyData(apps: Application[]) {
   }));
 }
 
-function getAppStatusAtTime(app: Application, isoTime: string): ApplicationStatus | null {
-  if (app.history.length > 0) {
-    let last: ApplicationStatus | null = null;
-    for (const entry of app.history) {
-      if (entry.ts <= isoTime) last = entry.to;
-    }
-    return last;
-  }
-  // Legacy app without history: visible from lastUpdated onwards at current status
-  return app.lastUpdated <= isoTime ? app.status : null;
-}
-
 function buildTimelineData(apps: Application[]): StatusTimelinePoint[] {
-  // Collect every unique event timestamp across all apps
-  const tsSet = new Set<string>();
+  // Flatten all history entries into a single event list
+  const events: { ts: string; from: ApplicationStatus | null; to: ApplicationStatus }[] = [];
+
   for (const app of apps) {
     if (app.history.length > 0) {
-      for (const entry of app.history) tsSet.add(entry.ts);
+      for (const entry of app.history) {
+        events.push({ ts: entry.ts, from: entry.from, to: entry.to });
+      }
     } else {
-      tsSet.add(app.lastUpdated);
+      // Legacy app: synthetic creation event at lastUpdated
+      events.push({ ts: app.lastUpdated, from: null, to: app.status });
     }
   }
-  if (tsSet.size === 0) return [];
 
-  // Include current moment as the trailing point
-  tsSet.add(new Date().toISOString());
+  if (events.length === 0) return [];
 
-  const timestamps = Array.from(tsSet).sort();
+  events.sort((a, b) => a.ts.localeCompare(b.ts));
 
-  return timestamps.map((ts) => {
-    const counts: Record<ApplicationStatus, number> = {
-      bookmarked: 0, applied: 0, interviewing: 0,
-      offered: 0, rejected: 0, withdrawn: 0, ghosted: 0,
-    };
-    for (const app of apps) {
-      const status = getAppStatusAtTime(app, ts);
-      if (status) counts[status]++;
+  // Walk events in order, applying each delta to running counts.
+  // Emit one data point per unique timestamp (batch same-ts events together).
+  const counts: Record<ApplicationStatus, number> = {
+    bookmarked: 0, applied: 0, interviewing: 0,
+    offered: 0, rejected: 0, withdrawn: 0, ghosted: 0,
+  };
+  const points: StatusTimelinePoint[] = [];
+  let i = 0;
+
+  while (i < events.length) {
+    const ts = events[i].ts;
+    // Apply all events sharing this timestamp
+    while (i < events.length && events[i].ts === ts) {
+      const { from, to } = events[i];
+      if (from !== null) counts[from]--;
+      counts[to]++;
+      i++;
     }
-    return { ts, ...counts };
-  });
+    points.push({ ts, ...counts });
+  }
+
+  // Trailing point at "now" so the final state extends to the present
+  points.push({ ts: new Date().toISOString(), ...counts });
+
+  return points;
 }
 
 export function AnalyticsPage() {
