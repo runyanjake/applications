@@ -15,6 +15,7 @@ const responseFormat = {
         position:       { type: "string" },
         companyName:    { type: "string" },
         companyWebsite: { type: "string" },
+        jobPostingUrl:  { type: "string" },
         city:           { type: "string" },
         state:          { type: "string" },
         country:        { type: "string" },
@@ -77,7 +78,9 @@ export class OpenAILLMService implements LLMService {
     }
 
     const data = await response.json();
-    const text: string = data?.choices?.[0]?.message?.content ?? "";
+    const message = data?.choices?.[0]?.message;
+    // Some reasoning/thinking models put output in reasoning_content with an empty content field
+    const text: string = message?.content || message?.reasoning_content || "";
 
     if (!text) throw new Error("OpenAI returned an empty response");
 

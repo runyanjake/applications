@@ -68,6 +68,7 @@ export function parseExtractedJSON(
   if (typeof parsed.position === "string") result.position = parsed.position;
   if (typeof parsed.companyName === "string") result.companyName = parsed.companyName;
   if (typeof parsed.companyWebsite === "string") result.companyWebsite = parsed.companyWebsite;
+  if (typeof parsed.jobPostingUrl === "string") result.jobPostingUrl = parsed.jobPostingUrl;
   if (typeof parsed.city === "string") result.city = parsed.city;
   if (typeof parsed.state === "string") result.state = parsed.state;
   if (typeof parsed.country === "string") result.country = parsed.country;

@@ -7,6 +7,7 @@ Extract ONLY these fields (use these exact keys):
 - "position": string — The job title
 - "companyName": string — The company name
 - "companyWebsite": string — The company's website URL. If a URL is explicitly written in the text, use that. Otherwise, infer it from the company name (e.g. "Salesforce" → "https://salesforce.com", "Google" → "https://google.com"). Always include this field.
+- "jobPostingUrl": string — The direct URL to this specific job posting (e.g. a Greenhouse, Lever, Workday, or LinkedIn link). Only include if a URL is explicitly written in the text and it clearly points to the job listing itself, not the company homepage.
 - "city": string — City or cities where the job is located. If multiple locations are listed, provide them as a comma-separated list (e.g. "New York, San Francisco, Seattle"). Omit only if no city is stated and the role is fully remote.
 - "state": string — State(s), province(s), or region(s) corresponding to the cities above, in the same order, as a comma-separated list (e.g. "NY, CA, WA"). Use standard abbreviations. Omit only if no state/region information is present.
 - "country": string — Country or countries corresponding to the cities above, in the same order, as a comma-separated list (e.g. "USA, USA, USA"). Omit only if no country information is present.
