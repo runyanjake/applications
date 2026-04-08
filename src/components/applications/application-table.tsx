@@ -4,7 +4,7 @@ import {
   STATUS_TRANSITIONS,
   STATUS_CATEGORY,
 } from "../../types/application";
-import { formatDate, formatSalary, formatStatus } from "../../utils/formatters";
+import { formatRelativeDate, formatSalary, formatStatus } from "../../utils/formatters";
 import { StatusBadge } from "./status-badge";
 import { useApplications } from "../../hooks/use-applications";
 import { ApplicationForm } from "./application-form";
@@ -13,7 +13,7 @@ interface ApplicationTableProps {
   applications: Application[];
 }
 
-type SortField = "position" | "companyName" | "status" | "dateApplied";
+type SortField = "position" | "companyName" | "status" | "lastUpdated";
 type SortDir = "asc" | "desc";
 
 function formatLocation(app: Application): string {
@@ -27,7 +27,7 @@ function formatLocation(app: Application): string {
 
 export function ApplicationTable({ applications }: ApplicationTableProps) {
   const { updateApplication, deleteApplication } = useApplications();
-  const [sortField, setSortField] = useState<SortField>("dateApplied");
+  const [sortField, setSortField] = useState<SortField>("lastUpdated");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -96,7 +96,7 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
             <ColHeader>Salary</ColHeader>
             <ColHeader>Interest</ColHeader>
             <SortHeader field="status">Status</SortHeader>
-            <SortHeader field="dateApplied">Applied</SortHeader>
+            <SortHeader field="lastUpdated">Updated</SortHeader>
             <ColHeader>Notes</ColHeader>
             <th className="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
               Actions
@@ -192,9 +192,9 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
                   )}
                 </td>
 
-                {/* Date Applied */}
-                <td className="px-3 py-3 text-sm text-gray-500">
-                  {formatDate(app.dateApplied)}
+                {/* Last Updated */}
+                <td className="px-3 py-3 text-sm text-gray-500" title={new Date(app.lastUpdated).toLocaleString()}>
+                  {formatRelativeDate(app.lastUpdated)}
                 </td>
 
                 {/* Notes */}
