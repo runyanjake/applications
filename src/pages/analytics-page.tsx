@@ -52,7 +52,7 @@ function buildCompanyData(apps: Application[]) {
   return entries.map(([name, value], i) => ({
     label: name,
     value,
-    color: COMPANY_PALETTE[i % COMPANY_PALETTE.length],
+    color: COMPANY_PALETTE[i % COMPANY_PALETTE.length] ?? "#94a3b8",
   }));
 }
 
