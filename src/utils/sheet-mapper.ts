@@ -4,6 +4,7 @@ import {
   type Application,
   type ApplicationStatus,
   type Currency,
+  type HistoryEntry,
   type InterestLevel,
 } from "../types/application";
 
@@ -25,6 +26,7 @@ export const HEADER_ROW = [
   "Last Updated",
   "Notes",
   "Date Applied",
+  "History",
 ];
 
 export function rowToApplication(row: string[]): Application {
@@ -46,6 +48,7 @@ export function rowToApplication(row: string[]): Application {
     lastUpdated: row[14] ?? new Date().toISOString(),
     notes: row[15] ?? "",
     dateApplied: row[16] ?? "",
+    history: parseHistory(row[17]),
   };
 }
 
@@ -61,6 +64,16 @@ function parseStatus(raw: string | undefined): ApplicationStatus {
     return normalized as ApplicationStatus;
   }
   return LEGACY_STATUS_MAP[normalized] ?? "bookmarked";
+}
+
+function parseHistory(raw: string | undefined): HistoryEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as HistoryEntry[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function parseInterest(raw: string | undefined): InterestLevel {
@@ -90,5 +103,6 @@ export function applicationToRow(app: Application): string[] {
     app.lastUpdated,
     app.notes,
     app.dateApplied,
+    app.history.length > 0 ? JSON.stringify(app.history) : "",
   ];
 }

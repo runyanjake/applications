@@ -2,13 +2,13 @@ import { useMemo } from "react";
 import { useApplications } from "../hooks/use-applications";
 import { useStorage } from "../hooks/use-storage";
 import type { Application, ApplicationStatus } from "../types/application";
-import { ACTIVE_STATUSES } from "../types/application";
+import { ACTIVE_STATUSES, APPLICATION_STATUSES } from "../types/application";
 import { PageHeader } from "../components/shared/page-header";
 import { EmptyState } from "../components/shared/empty-state";
 import { LoadingSpinner } from "../components/shared/loading-spinner";
 import { SpreadsheetSetup } from "../components/dashboard/spreadsheet-setup";
 import { StatusDistributionChart } from "../components/charts/status-distribution-chart";
-import { ApplicationsTimelineChart } from "../components/charts/applications-timeline-chart";
+import { ApplicationsTimelineChart, type StatusTimelinePoint } from "../components/charts/applications-timeline-chart";
 import { ApplicationPipelineSankey } from "../components/charts/application-pipeline-sankey";
 
 const COMPANY_PALETTE = [
@@ -56,15 +56,46 @@ function buildCompanyData(apps: Application[]) {
   }));
 }
 
-function buildTimelineData(apps: Application[]) {
-  const counts = new Map<string, number>();
-  for (const app of apps) {
-    const date = app.dateApplied?.slice(0, 7);
-    if (date) counts.set(date, (counts.get(date) ?? 0) + 1);
+function getAppStatusAtTime(app: Application, isoTime: string): ApplicationStatus | null {
+  if (app.history.length > 0) {
+    let last: ApplicationStatus | null = null;
+    for (const entry of app.history) {
+      if (entry.ts <= isoTime) last = entry.to;
+    }
+    return last;
   }
-  return Array.from(counts.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, count]) => ({ date, count }));
+  // Legacy app without history: visible from lastUpdated onwards at current status
+  return app.lastUpdated <= isoTime ? app.status : null;
+}
+
+function buildTimelineData(apps: Application[]): StatusTimelinePoint[] {
+  // Collect every unique event timestamp across all apps
+  const tsSet = new Set<string>();
+  for (const app of apps) {
+    if (app.history.length > 0) {
+      for (const entry of app.history) tsSet.add(entry.ts);
+    } else {
+      tsSet.add(app.lastUpdated);
+    }
+  }
+  if (tsSet.size === 0) return [];
+
+  // Include current moment as the trailing point
+  tsSet.add(new Date().toISOString());
+
+  const timestamps = Array.from(tsSet).sort();
+
+  return timestamps.map((ts) => {
+    const counts: Record<ApplicationStatus, number> = {
+      bookmarked: 0, applied: 0, interviewing: 0,
+      offered: 0, rejected: 0, withdrawn: 0, ghosted: 0,
+    };
+    for (const app of apps) {
+      const status = getAppStatusAtTime(app, ts);
+      if (status) counts[status]++;
+    }
+    return { ts, ...counts };
+  });
 }
 
 export function AnalyticsPage() {
@@ -147,7 +178,7 @@ export function AnalyticsPage() {
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <ApplicationsTimelineChart
             data={charts.timeline}
-            title="Applications Over Time"
+            title="Status Over Time"
           />
         </div>
       </div>

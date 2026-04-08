@@ -4,7 +4,7 @@ import {
   STATUS_TRANSITIONS,
   STATUS_CATEGORY,
 } from "../../types/application";
-import { formatRelativeDate, formatSalary, formatStatus } from "../../utils/formatters";
+import { formatDateTime, formatRelativeDate, formatSalary, formatStatus } from "../../utils/formatters";
 import { StatusBadge } from "./status-badge";
 import { useApplications } from "../../hooks/use-applications";
 import { ApplicationForm } from "./application-form";
@@ -193,7 +193,7 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
                 </td>
 
                 {/* Last Updated */}
-                <td className="px-3 py-3 text-sm text-gray-500" title={new Date(app.lastUpdated).toLocaleString()}>
+                <td className="px-3 py-3 text-sm text-gray-500" title={formatDateTime(app.lastUpdated)}>
                   {formatRelativeDate(app.lastUpdated)}
                 </td>
 

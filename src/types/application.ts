@@ -28,13 +28,13 @@ export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
  *   ghosted      → (terminal)
  */
 export const STATUS_TRANSITIONS: Record<ApplicationStatus, readonly ApplicationStatus[]> = {
-  bookmarked:   ["applied", "withdrawn"],
-  applied:      ["interviewing", "rejected", "ghosted", "withdrawn"],
-  interviewing: ["offered", "rejected", "withdrawn"],
-  offered:      [],
-  rejected:     [],
-  withdrawn:    [],
-  ghosted:      [],
+  bookmarked:   ["applied", "interviewing", "offered", "rejected", "withdrawn", "ghosted"],
+  applied:      ["bookmarked", "interviewing", "offered", "rejected", "withdrawn", "ghosted"],
+  interviewing: ["bookmarked", "applied", "offered", "rejected", "withdrawn", "ghosted"],
+  offered:      ["bookmarked", "applied", "interviewing", "rejected", "withdrawn", "ghosted"],
+  rejected:     ["bookmarked", "applied", "interviewing", "offered", "withdrawn", "ghosted"],
+  withdrawn:    ["bookmarked", "applied", "interviewing", "offered", "rejected", "ghosted"],
+  ghosted:      ["bookmarked", "applied", "interviewing", "offered", "rejected", "withdrawn"],
 } as const;
 
 /** Pre-interview: not yet in an active interview loop. */
@@ -85,6 +85,12 @@ export const CURRENCIES = [
 
 export type Currency = (typeof CURRENCIES)[number];
 
+export interface HistoryEntry {
+  ts: string;
+  from: ApplicationStatus | null;
+  to: ApplicationStatus;
+}
+
 export interface Application {
   id: string;
   position: string;
@@ -103,9 +109,10 @@ export interface Application {
   lastUpdated: string;
   notes: string;
   dateApplied: string;
+  history: HistoryEntry[];
 }
 
-export type ApplicationFormData = Omit<Application, "id" | "lastUpdated">;
+export type ApplicationFormData = Omit<Application, "id" | "lastUpdated" | "history">;
 
 export interface ApplicationFilters {
   status?: ApplicationStatus[];

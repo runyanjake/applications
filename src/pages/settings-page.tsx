@@ -5,6 +5,7 @@ import { SpreadsheetCard } from "../components/settings/spreadsheet-card";
 import { AuthLifecycleCard } from "../components/settings/auth-lifecycle-card";
 import { SyncCard } from "../components/settings/sync-card";
 import { LLMProviderCard } from "../components/settings/llm-provider-card";
+import { TimezoneCard } from "../components/settings/timezone-card";
 
 export function SettingsPage() {
   const { state } = useAuth();
@@ -16,6 +17,7 @@ export function SettingsPage() {
         {state.user && <UserInfoCard user={state.user} />}
         <SpreadsheetCard />
         <LLMProviderCard />
+        <TimezoneCard />
         <SyncCard />
         <AuthLifecycleCard />
       </div>

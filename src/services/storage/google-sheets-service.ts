@@ -73,7 +73,7 @@ export class GoogleSheetsService implements StorageService {
     const response =
       await window.gapi.client.sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A:Q`,
+        range: `${this.sheetName}!A:R`,
       });
     const rows = response.result.values ?? [];
     if (rows.length <= 1) return [];
@@ -87,7 +87,7 @@ export class GoogleSheetsService implements StorageService {
 
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!A1:Q${endRow}`,
+      range: `${this.sheetName}!A1:R${endRow}`,
       valueInputOption: "USER_ENTERED",
       resource: { values: allRows },
     });
@@ -139,13 +139,13 @@ export class GoogleSheetsService implements StorageService {
     const response =
       await window.gapi.client.sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A1:Q1`,
+        range: `${this.sheetName}!A1:R1`,
       });
     const firstRow = response.result.values?.[0];
     if (!firstRow || firstRow[0] !== HEADER_ROW[0]) {
       await window.gapi.client.sheets.spreadsheets.values.update({
         spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A1:Q1`,
+        range: `${this.sheetName}!A1:R1`,
         valueInputOption: "RAW",
         resource: { values: [HEADER_ROW] },
       });

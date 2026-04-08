@@ -1,4 +1,5 @@
 import type { ApplicationStatus, Currency } from "../types/application";
+import { getTimezone } from "./timezone-store";
 
 const CURRENCY_SYMBOLS: Record<Currency, string> = {
   USD: "$",
@@ -31,6 +32,19 @@ export function formatDate(iso: string): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: getTimezone(),
+  });
+}
+
+export function formatDateTime(iso: string): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: getTimezone(),
   });
 }
 

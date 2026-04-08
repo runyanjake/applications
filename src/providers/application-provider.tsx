@@ -198,10 +198,12 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   // Local-only CRUD
   const addApplication = useCallback(
     (data: ApplicationFormData) => {
+      const now = new Date().toISOString();
       const app: Application = {
         ...data,
         id: generateId(),
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: now,
+        history: [{ ts: now, from: null, to: data.status }],
       };
       persistLocal([app, ...appsRef.current], true);
       maybeAutoSync();
@@ -211,11 +213,15 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
 
   const updateApplication = useCallback(
     (id: string, data: Partial<Application>) => {
-      const updated = appsRef.current.map((a) =>
-        a.id === id
-          ? { ...a, ...data, lastUpdated: new Date().toISOString() }
-          : a,
-      );
+      const now = new Date().toISOString();
+      const updated = appsRef.current.map((a) => {
+        if (a.id !== id) return a;
+        const newHistory =
+          data.status !== undefined && data.status !== a.status
+            ? [...a.history, { ts: now, from: a.status, to: data.status }]
+            : a.history;
+        return { ...a, ...data, lastUpdated: now, history: newHistory };
+      });
       persistLocal(updated, true);
       maybeAutoSync();
     },
