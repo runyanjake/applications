@@ -85,12 +85,14 @@ function buildTimelineData(apps: Application[]): StatusTimelinePoint[] {
   let i = 0;
 
   while (i < events.length) {
-    const ts = events[i].ts;
+    const first = events[i]!;
+    const ts = first.ts;
     // Apply all events sharing this timestamp
-    while (i < events.length && events[i].ts === ts) {
-      const { from, to } = events[i];
-      if (from !== null) counts[from]--;
-      counts[to]++;
+    while (i < events.length) {
+      const ev = events[i]!;
+      if (ev.ts !== ts) break;
+      if (ev.from !== null) counts[ev.from]--;
+      counts[ev.to]++;
       i++;
     }
     points.push({ ts, ...counts });
