@@ -142,7 +142,13 @@ export class GoogleSheetsService implements StorageService {
         range: `${this.sheetName}!A1:R1`,
       });
     const firstRow = response.result.values?.[0];
-    if (!firstRow || firstRow[0] !== HEADER_ROW[0]) {
+    // Write header if: missing entirely, wrong first cell, or fewer columns than expected
+    // (the last case handles sheets created before the History column was added)
+    const needsUpdate =
+      !firstRow ||
+      firstRow[0] !== HEADER_ROW[0] ||
+      firstRow.length < HEADER_ROW.length;
+    if (needsUpdate) {
       await window.gapi.client.sheets.spreadsheets.values.update({
         spreadsheetId: this.spreadsheetId,
         range: `${this.sheetName}!A1:R1`,

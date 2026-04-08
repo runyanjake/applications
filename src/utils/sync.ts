@@ -43,6 +43,7 @@ export function computeVersion(applications: Application[]): string {
       a.lastUpdated,
       a.notes,
       a.dateApplied,
+      JSON.stringify(a.history),
     ]),
   );
   let hash = 0;

@@ -79,8 +79,12 @@ export class OpenAILLMService implements LLMService {
 
     const data = await response.json();
     const message = data?.choices?.[0]?.message;
-    // Some reasoning/thinking models put output in reasoning_content with an empty content field
-    const text: string = message?.content || message?.reasoning_content || "";
+    const content: string = message?.content ?? "";
+    const reasoning: string = message?.reasoning_content ?? "";
+    // Prefer whichever field contains a JSON object; some reasoning models
+    // put the answer in reasoning_content and leave content empty or as plain text.
+    const hasJson = (s: string) => s.includes("{") && s.includes("}");
+    const text = hasJson(content) ? content : hasJson(reasoning) ? reasoning : content || reasoning;
 
     if (!text) throw new Error("OpenAI returned an empty response");
 
