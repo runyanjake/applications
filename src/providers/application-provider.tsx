@@ -52,9 +52,11 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   );
   const appsRef = useRef(applications);
   const syncRef = useRef(syncState);
+  const isLoadingRef = useRef(false);
 
   appsRef.current = applications;
   syncRef.current = syncState;
+  isLoadingRef.current = isLoading;
 
   const persistLocal = useCallback(
     (apps: Application[], markDirty: boolean) => {
@@ -118,6 +120,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   // Sync: read remote version, compare, write if safe
   const sync = useCallback(async () => {
     if (!isConfigured) return;
+    if (isLoadingRef.current) return; // don't sync while initial sheet load is in flight
     setSyncState((prev) => ({ ...prev, status: "syncing", error: null }));
     sessionSet(SYNC_STATE_KEY, { ...syncRef.current, status: "syncing" });
 

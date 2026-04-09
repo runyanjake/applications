@@ -103,6 +103,6 @@ export function applicationToRow(app: Application): string[] {
     app.lastUpdated,
     app.notes,
     app.dateApplied,
-    app.history.length > 0 ? JSON.stringify(app.history) : "",
+    (app.history ?? []).length > 0 ? JSON.stringify(app.history) : "",
   ];
 }
