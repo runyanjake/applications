@@ -81,6 +81,15 @@ export class GoogleSheetsService implements StorageService {
   }
 
   async writeAll(applications: Application[]): Promise<void> {
+    const emptyHistoryIds = applications
+      .filter((a) => (a.history ?? []).length === 0)
+      .map((a) => a.id);
+    if (emptyHistoryIds.length > 0) {
+      console.warn("[writeAll] Apps with empty history before write:", emptyHistoryIds);
+    } else {
+      console.debug("[writeAll] All", applications.length, "apps have history — writing");
+    }
+
     const dataRows = applications.map(applicationToRow);
     const allRows = [HEADER_ROW, ...dataRows];
     const endRow = allRows.length;
@@ -88,7 +97,7 @@ export class GoogleSheetsService implements StorageService {
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId: this.spreadsheetId,
       range: `${this.sheetName}!A1:R${endRow}`,
-      valueInputOption: "USER_ENTERED",
+      valueInputOption: "RAW",
       resource: { values: allRows },
     });
 
