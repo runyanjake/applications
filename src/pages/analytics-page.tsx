@@ -56,50 +56,53 @@ function buildCompanyData(apps: Application[]) {
   }));
 }
 
-/** Returns the status of a single app at a given ISO timestamp by replaying its history. */
-function statusAtTime(app: Application, isoTime: string): ApplicationStatus | null {
-  if (app.history.length > 0) {
-    let last: ApplicationStatus | null = null;
-    for (const entry of app.history) {
-      if (entry.ts <= isoTime) last = entry.to;
-    }
-    return last;
-  }
-  // Legacy app with no history: visible from lastUpdated onwards at current status
-  return app.lastUpdated <= isoTime ? app.status : null;
-}
-
 function buildTimelineData(apps: Application[]): StatusTimelinePoint[] {
-  // Collect every unique event timestamp — one data point per event
-  const tsSet = new Set<string>();
+  type Event = { ts: string; from: ApplicationStatus | null; to: ApplicationStatus };
+
+  // Collect every status-change event across all apps
+  const events: Event[] = [];
   for (const app of apps) {
     if (app.history.length > 0) {
-      for (const entry of app.history) tsSet.add(entry.ts);
+      for (const entry of app.history) {
+        events.push({ ts: entry.ts, from: entry.from, to: entry.to });
+      }
     } else {
-      tsSet.add(app.lastUpdated);
+      // Legacy app with no history: treat as a single creation event
+      events.push({ ts: app.lastUpdated, from: null, to: app.status });
     }
   }
-  if (tsSet.size === 0) return [];
+  if (events.length === 0) return [];
 
-  // Trailing "now" so the chart extends to the present
-  tsSet.add(new Date().toISOString());
+  events.sort((a, b) => a.ts.localeCompare(b.ts));
 
-  const timestamps = Array.from(tsSet).sort();
+  // Stream through events in order, applying deltas to running counts.
+  // Group events at the same timestamp into a single data point.
+  const counts: Record<ApplicationStatus, number> = {
+    bookmarked: 0, applied: 0, interviewing: 0,
+    offered: 0, rejected: 0, withdrawn: 0, ghosted: 0,
+  };
+  const points: StatusTimelinePoint[] = [];
 
-  // At each timestamp, replay every app's full history to get its state,
-  // then sum across all apps. This guarantees correct aggregates regardless
-  // of history consistency.
-  return timestamps.map((ts) => {
-    const counts: Record<ApplicationStatus, number> = {
-      bookmarked: 0, applied: 0, interviewing: 0,
-      offered: 0, rejected: 0, withdrawn: 0, ghosted: 0,
-    };
-    for (const app of apps) {
-      const status = statusAtTime(app, ts);
-      if (status) counts[status]++;
+  let i = 0;
+  while (i < events.length) {
+    const ts = events[i].ts;
+    // Apply all events sharing this timestamp
+    while (i < events.length && events[i].ts === ts) {
+      const { from, to } = events[i];
+      if (from !== null) counts[from]--;
+      counts[to]++;
+      i++;
     }
-    return { ts, ...counts };
-  });
+    points.push({ ts, ...counts });
+  }
+
+  // Extend the line to the present without implying a change occurred
+  const nowTs = new Date().toISOString();
+  if (points[points.length - 1]!.ts < nowTs) {
+    points.push({ ts: nowTs, ...counts });
+  }
+
+  return points;
 }
 
 export function AnalyticsPage() {
