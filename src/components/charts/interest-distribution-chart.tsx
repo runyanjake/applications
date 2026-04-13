@@ -1,13 +1,4 @@
-import {
-  BarChart,
-  Bar,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import ReactECharts from "echarts-for-react";
 
 interface DataPoint {
   label: string;
@@ -28,24 +19,23 @@ export function InterestDistributionChart({
 }: InterestDistributionChartProps) {
   if (data.length === 0) return null;
 
+  const option = {
+    tooltip: { trigger: "axis" },
+    grid: { left: 40, right: 20, top: 20, bottom: 40 },
+    xAxis: { type: "category", data: data.map((d) => d.label), axisLabel: { fontSize: 12 } },
+    yAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 12 } },
+    series: [{
+      type: "bar",
+      name: "Applications",
+      data: data.map((d) => ({ value: d.value, itemStyle: { color: d.color } })),
+      emphasis: { itemStyle: { opacity: 0.8 } },
+    }],
+  };
+
   return (
     <div>
-      {title && (
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
-      )}
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-          <Tooltip />
-          <Bar dataKey="value" name="Applications">
-            {data.map((entry, i) => (
-              <Cell key={i} fill={entry.color} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+      {title && <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>}
+      <ReactECharts option={option} style={{ height }} notMerge />
     </div>
   );
 }

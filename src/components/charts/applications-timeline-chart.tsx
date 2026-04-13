@@ -1,13 +1,4 @@
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import ReactECharts from "echarts-for-react";
 import type { ApplicationStatus } from "../../types/application";
 import { APPLICATION_STATUSES } from "../../types/application";
 import { formatDate, formatStatus } from "../../utils/formatters";
@@ -37,54 +28,62 @@ export function ApplicationsTimelineChart({
 }: ApplicationsTimelineChartProps) {
   if (data.length === 0) return null;
 
-  // Convert ISO timestamps to ms-since-epoch so the X axis can be
-  // scaled proportionally to real time rather than treating every
-  // data point as an equal-width category.
-  const numericData = data.map((point) => ({
-    ...point,
-    t: new Date(point.ts).getTime(),
-  }));
-
   const activeStatuses = APPLICATION_STATUSES.filter((s) =>
     data.some((point) => point[s] > 0),
   );
+
+  const option = {
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "cross" },
+      formatter: (params: any[]) => {
+        if (!params.length) return "";
+        const ts = params[0]?.axisValue;
+        const header = `<b>${formatDate(new Date(ts).toISOString())}</b>`;
+        const rows = params
+          .filter((p) => p.value[1] > 0)
+          .map((p) => `${p.marker}${p.seriesName}: <b>${p.value[1]}</b>`)
+          .join("<br/>");
+        return `${header}<br/>${rows}`;
+      },
+    },
+    legend: {
+      bottom: 0,
+      type: "scroll",
+      textStyle: { fontSize: 11 },
+    },
+    grid: { left: 40, right: 20, top: 20, bottom: 50 },
+    xAxis: {
+      type: "time",
+      axisLabel: {
+        fontSize: 11,
+        formatter: (ts: number) => formatDate(new Date(ts).toISOString()),
+      },
+    },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      axisLabel: { fontSize: 12 },
+    },
+    series: activeStatuses.map((status) => ({
+      name: formatStatus(status),
+      type: "line",
+      smooth: true,
+      symbol: "circle",
+      symbolSize: 6,
+      lineStyle: { width: 2 },
+      itemStyle: { color: STATUS_COLORS[status] },
+      // [timestamp-ms, count] pairs — ECharts time axis spaces these proportionally
+      data: data.map((point) => [new Date(point.ts).getTime(), point[status]]),
+    })),
+  };
 
   return (
     <div>
       {title && (
         <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
       )}
-      <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={numericData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis
-            dataKey="t"
-            type="number"
-            scale="time"
-            domain={["dataMin", "dataMax"]}
-            tickFormatter={(t: number) => formatDate(new Date(t).toISOString())}
-            tick={{ fontSize: 11 }}
-            minTickGap={80}
-          />
-          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-          <Tooltip
-            labelFormatter={(t: number) => formatDate(new Date(t).toISOString())}
-            formatter={(value, name) => [value, formatStatus(name as ApplicationStatus)]}
-          />
-          <Legend formatter={(name) => formatStatus(name as ApplicationStatus)} />
-          {activeStatuses.map((status) => (
-            <Line
-              key={status}
-              type="monotone"
-              dataKey={status}
-              stroke={STATUS_COLORS[status]}
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+      <ReactECharts option={option} style={{ height }} notMerge />
     </div>
   );
 }

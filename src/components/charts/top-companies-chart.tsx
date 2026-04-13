@@ -1,12 +1,4 @@
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import ReactECharts from "echarts-for-react";
 
 interface CompanyDataPoint {
   label: string;
@@ -19,32 +11,27 @@ interface TopCompaniesChartProps {
   height?: number;
 }
 
-export function TopCompaniesChart({
-  data,
-  title,
-  height = 300,
-}: TopCompaniesChartProps) {
+export function TopCompaniesChart({ data, title, height = 300 }: TopCompaniesChartProps) {
   if (data.length === 0) return null;
+
+  const option = {
+    tooltip: { trigger: "axis" },
+    grid: { left: 130, right: 20, top: 10, bottom: 30 },
+    xAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 12 } },
+    yAxis: { type: "category", data: data.map((d) => d.label), axisLabel: { fontSize: 12 } },
+    series: [{
+      type: "bar",
+      name: "Applications",
+      data: data.map((d) => d.value),
+      itemStyle: { color: "#6366f1" },
+      emphasis: { itemStyle: { color: "#4f46e5" } },
+    }],
+  };
 
   return (
     <div>
-      {title && (
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
-      )}
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-          <YAxis
-            dataKey="label"
-            type="category"
-            width={120}
-            tick={{ fontSize: 12 }}
-          />
-          <Tooltip />
-          <Bar dataKey="value" fill="#6366f1" name="Applications" />
-        </BarChart>
-      </ResponsiveContainer>
+      {title && <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>}
+      <ReactECharts option={option} style={{ height }} notMerge />
     </div>
   );
 }
