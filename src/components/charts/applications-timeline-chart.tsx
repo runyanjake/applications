@@ -65,7 +65,7 @@ export function ApplicationsTimelineChart({
           {activeStatuses.map((status) => (
             <Line
               key={status}
-              type="stepAfter"
+              type="monotone"
               dataKey={status}
               stroke={STATUS_COLORS[status]}
               strokeWidth={2}
