@@ -56,11 +56,11 @@ function buildCompanyData(apps: Application[]) {
   }));
 }
 
-function buildTimelineData(apps: Application[]): StatusTimelinePoint[] {
-  type Event = { ts: string; from: ApplicationStatus | null; to: ApplicationStatus };
+type StatusEvent = { ts: string; from: ApplicationStatus | null; to: ApplicationStatus };
 
+function buildTimelineData(apps: Application[]): StatusTimelinePoint[] {
   // Collect every status-change event across all apps
-  const events: Event[] = [];
+  const events: StatusEvent[] = [];
   for (const app of apps) {
     if (app.history.length > 0) {
       for (const entry of app.history) {
@@ -83,12 +83,11 @@ function buildTimelineData(apps: Application[]): StatusTimelinePoint[] {
   };
   const points: StatusTimelinePoint[] = [];
 
-  let i = 0;
-  while (i < events.length) {
-    const ts = events[i].ts;
+  for (let i = 0; i < events.length; ) {
+    const ts = events[i]!.ts;
     // Apply all events sharing this timestamp
-    while (i < events.length && events[i].ts === ts) {
-      const { from, to } = events[i];
+    while (i < events.length && events[i]!.ts === ts) {
+      const { from, to } = events[i]!;
       if (from !== null) counts[from]--;
       counts[to]++;
       i++;
