@@ -37,7 +37,14 @@ export function ApplicationsTimelineChart({
 }: ApplicationsTimelineChartProps) {
   if (data.length === 0) return null;
 
-  // Only render lines for statuses that are non-zero in at least one point
+  // Convert ISO timestamps to ms-since-epoch so the X axis can be
+  // scaled proportionally to real time rather than treating every
+  // data point as an equal-width category.
+  const numericData = data.map((point) => ({
+    ...point,
+    t: new Date(point.ts).getTime(),
+  }));
+
   const activeStatuses = APPLICATION_STATUSES.filter((s) =>
     data.some((point) => point[s] > 0),
   );
@@ -48,17 +55,20 @@ export function ApplicationsTimelineChart({
         <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
       )}
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={data}>
+        <LineChart data={numericData}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
-            dataKey="ts"
-            tickFormatter={(ts: string) => formatDate(ts)}
+            dataKey="t"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            tickFormatter={(t: number) => formatDate(new Date(t).toISOString())}
             tick={{ fontSize: 11 }}
-            minTickGap={60}
+            minTickGap={80}
           />
           <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
           <Tooltip
-            labelFormatter={(ts: string) => formatDate(ts)}
+            labelFormatter={(t: number) => formatDate(new Date(t).toISOString())}
             formatter={(value, name) => [value, formatStatus(name as ApplicationStatus)]}
           />
           <Legend formatter={(name) => formatStatus(name as ApplicationStatus)} />
