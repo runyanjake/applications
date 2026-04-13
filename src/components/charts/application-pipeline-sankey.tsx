@@ -5,6 +5,7 @@ import type { Application, ApplicationStatus } from "../../types/application";
 interface ApplicationPipelineSankeyProps {
   applications: Application[];
   title: string;
+  interactive?: boolean;
 }
 
 const NODE_COLORS: Record<string, string> = {
@@ -23,11 +24,6 @@ const NODE_COLORS: Record<string, string> = {
 /**
  * Pipeline: bookmarked → applied → interviewing → complete
  * Complete (terminal): offered, rejected, ghosted, withdrawn
- *
- * Depth assignments for funnel calculation:
- *   bookmarked: 0, applied: 1, interviewing: 2
- *   Terminal exits assumed from: rejected/ghosted/withdrawn → applied (depth 1),
- *   offered → interviewing (depth 2)
  */
 function buildSankeyData(apps: Application[]) {
   const counts: Record<ApplicationStatus, number> = {
@@ -41,18 +37,17 @@ function buildSankeyData(apps: Application[]) {
   };
   for (const app of apps) counts[app.status]++;
 
-  // Nodes indexed 0-9
   const nodes = [
     { name: "All Applications" },   // 0
-    { name: "Bookmarked" },          // 1  (pre-interview, not yet applied)
-    { name: "Applied" },             // 2  (reached applied stage)
-    { name: "Interviewing" },        // 3  (reached interviewing)
-    { name: "Awaiting Response" },   // 4  (still at "applied" — waiting)
-    { name: "In Interviews" },       // 5  (still at "interviewing")
-    { name: "Offered" },             // 6  (terminal — got an offer)
-    { name: "Rejected" },            // 7  (terminal)
-    { name: "Ghosted" },             // 8  (terminal)
-    { name: "Withdrawn" },           // 9  (terminal)
+    { name: "Bookmarked" },          // 1
+    { name: "Applied" },             // 2
+    { name: "Interviewing" },        // 3
+    { name: "Awaiting Response" },   // 4
+    { name: "In Interviews" },       // 5
+    { name: "Offered" },             // 6
+    { name: "Rejected" },            // 7
+    { name: "Ghosted" },             // 8
+    { name: "Withdrawn" },           // 9
   ];
 
   const links: { source: number; target: number; value: number }[] = [];
@@ -61,45 +56,52 @@ function buildSankeyData(apps: Application[]) {
   };
 
   const total = apps.length;
-  // Apps that reached "applied" or beyond
   const appliedPlus = total - counts.bookmarked;
-  // Apps that reached "interviewing" or beyond (offered is terminal from interviewing)
   const interviewingPlus = counts.interviewing + counts.offered;
 
-  // All → branches
-  push(0, 1, counts.bookmarked);     // stayed at bookmarked
-  push(0, 2, appliedPlus);           // progressed to applied+
-
-  // Applied → branches
-  push(2, 3, interviewingPlus);      // progressed to interviews
-  push(2, 4, counts.applied);        // still awaiting response
-  push(2, 7, counts.rejected);       // rejected at application
-  push(2, 8, counts.ghosted);        // ghosted after applying
-  push(2, 9, counts.withdrawn);      // withdrew
-
-  // Interviewing → branches
-  push(3, 6, counts.offered);        // got an offer (terminal)
-  push(3, 5, counts.interviewing);   // still in interviews
+  push(0, 1, counts.bookmarked);
+  push(0, 2, appliedPlus);
+  push(2, 3, interviewingPlus);
+  push(2, 4, counts.applied);
+  push(2, 7, counts.rejected);
+  push(2, 8, counts.ghosted);
+  push(2, 9, counts.withdrawn);
+  push(3, 6, counts.offered);
+  push(3, 5, counts.interviewing);
 
   if (links.length === 0) return null;
 
   return { nodes, links };
 }
 
-function SankeyNode({ x, y, width, height, index, payload }: any) {
+function SankeyNode({ x, y, width, height, index, payload, hoveredNode, onHover }: any) {
   const name = payload?.name ?? "";
   const value = payload?.value ?? 0;
   const color = NODE_COLORS[name] ?? "#94a3b8";
+  const dimmed = hoveredNode !== null && hoveredNode !== index;
+
   return (
-    <Layer key={`node-${index}`}>
-      <Rectangle x={x} y={y} width={width} height={height} fill={color} fillOpacity={0.9} />
+    <Layer
+      onMouseEnter={onHover ? () => onHover(index) : undefined}
+      onMouseLeave={onHover ? () => onHover(null) : undefined}
+    >
+      <Rectangle
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={color}
+        fillOpacity={dimmed ? 0.2 : 0.9}
+        style={onHover ? { cursor: "pointer" } : undefined}
+      />
       {height > 14 && (
         <text
           x={x + width + 6}
           y={y + height / 2}
           textAnchor="start"
           dominantBaseline="central"
-          className="text-xs fill-gray-700"
+          fontSize={12}
+          fill={dimmed ? "#d1d5db" : "#374151"}
         >
           {name} ({value})
         </text>
@@ -108,18 +110,26 @@ function SankeyNode({ x, y, width, height, index, payload }: any) {
   );
 }
 
-function SankeyLink({ sourceX, targetX, sourceY, targetY, sourceControlX, targetControlX, linkWidth }: any) {
+function SankeyLink({
+  sourceX, targetX, sourceY, targetY,
+  sourceControlX, targetControlX,
+  linkWidth, payload, hoveredNode,
+}: any) {
+  // d3-sankey mutates source/target from indices to node objects
+  const srcIdx = typeof payload?.source === "object" ? payload?.source?.index : payload?.source;
+  const tgtIdx = typeof payload?.target === "object" ? payload?.target?.index : payload?.target;
+  const connected = hoveredNode === null || srcIdx === hoveredNode || tgtIdx === hoveredNode;
+  const opacity = hoveredNode === null ? 0.3 : connected ? 0.65 : 0.04;
+
   return (
     <Layer>
       <path
-        d={`
-          M${sourceX},${sourceY}
-          C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}
-        `}
+        d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
         fill="none"
         stroke="#94a3b8"
         strokeWidth={linkWidth}
-        strokeOpacity={0.3}
+        strokeOpacity={opacity}
+        style={{ transition: "stroke-opacity 0.12s ease" }}
       />
     </Layer>
   );
@@ -128,17 +138,17 @@ function SankeyLink({ sourceX, targetX, sourceY, targetY, sourceControlX, target
 export function ApplicationPipelineSankey({
   applications,
   title,
+  interactive = false,
 }: ApplicationPipelineSankeyProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
+  const [hoveredNode, setHoveredNode] = useState<number | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setWidth(entry.contentRect.width);
-      }
+      for (const entry of entries) setWidth(entry.contentRect.width);
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -155,16 +165,21 @@ export function ApplicationPipelineSankey({
     );
   }
 
+  // Scale height so nodes have breathing room
+  const height = Math.max(400, data.nodes.length * 50);
+  const onHover = interactive ? setHoveredNode : undefined;
+  const hovered = interactive ? hoveredNode : null;
+
   return (
     <div ref={containerRef}>
       <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
       <Sankey
         width={width}
-        height={400}
+        height={height}
         data={data}
-        node={<SankeyNode />}
-        link={<SankeyLink />}
-        nodePadding={24}
+        node={<SankeyNode hoveredNode={hovered} onHover={onHover} />}
+        link={<SankeyLink hoveredNode={hovered} />}
+        nodePadding={36}
         nodeWidth={10}
         margin={{ top: 20, right: 160, bottom: 20, left: 20 }}
       >

@@ -175,6 +175,7 @@ export function AnalyticsPage() {
           <ApplicationPipelineSankey
             applications={applications}
             title="Application Pipeline"
+            interactive
           />
         </div>
 
