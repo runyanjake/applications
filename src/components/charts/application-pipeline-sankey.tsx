@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Sankey, Tooltip, Layer, Rectangle } from "recharts";
 import type { Application, ApplicationStatus } from "../../types/application";
 
@@ -21,19 +21,10 @@ const NODE_COLORS: Record<string, string> = {
   "Withdrawn": "#fb923c",
 };
 
-/**
- * Pipeline: bookmarked → applied → interviewing → complete
- * Complete (terminal): offered, rejected, ghosted, withdrawn
- */
 function buildSankeyData(apps: Application[]) {
   const counts: Record<ApplicationStatus, number> = {
-    bookmarked: 0,
-    applied: 0,
-    interviewing: 0,
-    offered: 0,
-    rejected: 0,
-    withdrawn: 0,
-    ghosted: 0,
+    bookmarked: 0, applied: 0, interviewing: 0,
+    offered: 0, rejected: 0, withdrawn: 0, ghosted: 0,
   };
   for (const app of apps) counts[app.status]++;
 
@@ -70,38 +61,48 @@ function buildSankeyData(apps: Application[]) {
   push(3, 5, counts.interviewing);
 
   if (links.length === 0) return null;
-
   return { nodes, links };
 }
 
-function SankeyNode({ x, y, width, height, index, payload, hoveredNode, onHover }: any) {
-  const name = payload?.name ?? "";
-  const value = payload?.value ?? 0;
+// Recharts clones the node/link elements and merges in layout props, so extra
+// props passed here are forwarded to the custom renderers.
+
+function SankeyNode({
+  x, y, width, height, index, payload,
+  hoveredNode, onHover, dragOffsets, onDragStart,
+}: any) {
+  const name: string = payload?.name ?? "";
+  const value: number = payload?.value ?? 0;
   const color = NODE_COLORS[name] ?? "#94a3b8";
+  const yOff: number = dragOffsets?.[index] ?? 0;
+  const ry = y + yOff;
   const dimmed = hoveredNode !== null && hoveredNode !== index;
 
   return (
     <Layer
       onMouseEnter={onHover ? () => onHover(index) : undefined}
       onMouseLeave={onHover ? () => onHover(null) : undefined}
+      onMouseDown={
+        onDragStart
+          ? (e: React.MouseEvent) => { e.preventDefault(); onDragStart(index, e.clientY); }
+          : undefined
+      }
     >
       <Rectangle
-        x={x}
-        y={y}
-        width={width}
-        height={height}
+        x={x} y={ry} width={width} height={height}
         fill={color}
         fillOpacity={dimmed ? 0.2 : 0.9}
-        style={onHover ? { cursor: "pointer" } : undefined}
+        style={{ cursor: onDragStart ? "grab" : "default" }}
       />
       {height > 14 && (
         <text
           x={x + width + 6}
-          y={y + height / 2}
+          y={ry + height / 2}
           textAnchor="start"
           dominantBaseline="central"
           fontSize={12}
           fill={dimmed ? "#d1d5db" : "#374151"}
+          style={{ userSelect: "none", pointerEvents: "none" }}
         >
           {name} ({value})
         </text>
@@ -113,23 +114,39 @@ function SankeyNode({ x, y, width, height, index, payload, hoveredNode, onHover 
 function SankeyLink({
   sourceX, targetX, sourceY, targetY,
   sourceControlX, targetControlX,
-  linkWidth, payload, hoveredNode,
+  linkWidth, payload,
+  hoveredNode, dragOffsets,
 }: any) {
-  // d3-sankey mutates source/target from indices to node objects
-  const srcIdx = typeof payload?.source === "object" ? payload?.source?.index : payload?.source;
-  const tgtIdx = typeof payload?.target === "object" ? payload?.target?.index : payload?.target;
-  const connected = hoveredNode === null || srcIdx === hoveredNode || tgtIdx === hoveredNode;
-  const opacity = hoveredNode === null ? 0.3 : connected ? 0.65 : 0.04;
+  const srcNode = payload?.source;
+  const tgtNode = payload?.target;
+  const srcIdx: number = typeof srcNode === "object" ? srcNode?.index : srcNode;
+  const tgtIdx: number = typeof tgtNode === "object" ? tgtNode?.index : tgtNode;
+  const srcName: string = typeof srcNode === "object" ? (srcNode?.name ?? "") : "";
+
+  const srcOff: number = dragOffsets?.[srcIdx] ?? 0;
+  const tgtOff: number = dragOffsets?.[tgtIdx] ?? 0;
+  const sy = sourceY + srcOff;
+  const ty = targetY + tgtOff;
+
+  const connected =
+    hoveredNode === null || srcIdx === hoveredNode || tgtIdx === hoveredNode;
+  const opacity = hoveredNode === null ? 0.3 : connected ? 0.6 : 0.04;
+
+  // Color the link by its source node when highlighted so the origin is clear
+  const stroke =
+    hoveredNode !== null && connected
+      ? (NODE_COLORS[srcName] ?? "#94a3b8")
+      : "#94a3b8";
 
   return (
     <Layer>
       <path
-        d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+        d={`M${sourceX},${sy} C${sourceControlX},${sy} ${targetControlX},${ty} ${targetX},${ty}`}
         fill="none"
-        stroke="#94a3b8"
+        stroke={stroke}
         strokeWidth={linkWidth}
         strokeOpacity={opacity}
-        style={{ transition: "stroke-opacity 0.12s ease" }}
+        style={{ transition: "stroke-opacity 0.12s ease, stroke 0.12s ease" }}
       />
     </Layer>
   );
@@ -143,16 +160,56 @@ export function ApplicationPipelineSankey({
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [hoveredNode, setHoveredNode] = useState<number | null>(null);
+  const [dragOffsets, setDragOffsets] = useState<Record<number, number>>({});
+  const [draggingNode, setDraggingNode] = useState<number | null>(null);
+  const dragStartRef = useRef<{ clientY: number; startOffset: number } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const observer = new ResizeObserver((entries) => {
+    const ro = new ResizeObserver((entries) => {
       for (const entry of entries) setWidth(entry.contentRect.width);
     });
-    observer.observe(el);
-    return () => observer.disconnect();
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
+
+  // Attach global move/up handlers only while a drag is active
+  useEffect(() => {
+    if (!interactive || draggingNode === null) return;
+
+    const onMove = (e: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      const delta = e.clientY - dragStartRef.current.clientY;
+      setDragOffsets((prev) => ({
+        ...prev,
+        [draggingNode]: dragStartRef.current!.startOffset + delta,
+      }));
+    };
+    const onUp = () => {
+      setDraggingNode(null);
+      dragStartRef.current = null;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [interactive, draggingNode]);
+
+  const startDrag = useCallback(
+    (nodeIndex: number, clientY: number) => {
+      setDraggingNode(nodeIndex);
+      setHoveredNode(nodeIndex);
+      dragStartRef.current = {
+        clientY,
+        startOffset: dragOffsets[nodeIndex] ?? 0,
+      };
+    },
+    [dragOffsets],
+  );
 
   const data = buildSankeyData(applications);
 
@@ -165,20 +222,36 @@ export function ApplicationPipelineSankey({
     );
   }
 
-  // Scale height so nodes have breathing room
   const height = Math.max(400, data.nodes.length * 50);
-  const onHover = interactive ? setHoveredNode : undefined;
   const hovered = interactive ? hoveredNode : null;
+  const offsets = interactive ? dragOffsets : {};
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} style={{ cursor: draggingNode !== null ? "grabbing" : undefined }}>
       <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
+      {interactive && (
+        <p className="mb-3 text-xs text-gray-400">
+          Hover to highlight flows · drag nodes vertically to reposition
+        </p>
+      )}
       <Sankey
         width={width}
         height={height}
         data={data}
-        node={<SankeyNode hoveredNode={hovered} onHover={onHover} />}
-        link={<SankeyLink hoveredNode={hovered} />}
+        node={
+          <SankeyNode
+            hoveredNode={hovered}
+            onHover={interactive ? setHoveredNode : undefined}
+            dragOffsets={offsets}
+            onDragStart={interactive ? startDrag : undefined}
+          />
+        }
+        link={
+          <SankeyLink
+            hoveredNode={hovered}
+            dragOffsets={offsets}
+          />
+        }
         nodePadding={36}
         nodeWidth={10}
         margin={{ top: 20, right: 160, bottom: 20, left: 20 }}
