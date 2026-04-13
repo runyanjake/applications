@@ -2,6 +2,14 @@
 A bring-your-own-data, bring-your-own-LLM job application tracking site.
 Gain insights through an analytics breakdown, and optimize your application pipeline via integrations with major AI providers.
 
+## Tech Stack
+- **Frontend:** React + TypeScript (Vite)
+- **Storage:** Google Sheets (via Google Sheets API)
+- **Charts:** [Apache ECharts](https://echarts.apache.org/) via `echarts-for-react`
+  - Timeline (line), Sankey (pipeline), donut pie, bar charts
+  - Sankey supports node dragging and path highlighting on the analytics page
+- **AI:** Bring-your-own LLM — OpenAI-compatible endpoint (LM Studio, OpenAI, etc.)
+
 ## Local Hosting
 This application allows you to bring your own LLM rather than use one of the large providers. LM Studio seems to be the frontrunner tool for this sort of application. 
 
