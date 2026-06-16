@@ -32,19 +32,8 @@ pipeline {
     }
 
     stage('Lint & Type-check') {
-      agent {
-        docker {
-          image 'node:22-alpine'
-          reuseNode true
-        }
-      }
       steps {
-        sh '''
-          set -eu
-          npm ci
-          npm run lint
-          npx tsc -b
-        '''
+        sh 'docker build --target ci -t applications-ci:$BUILD_NUMBER .'
       }
     }
 

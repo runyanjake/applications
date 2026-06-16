@@ -1,7 +1,14 @@
-FROM node:22-alpine AS build
+FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
+
+# Lint + type-check target, used by CI (docker build --target ci).
+FROM deps AS ci
+COPY . .
+RUN npm run lint && npx tsc -b
+
+FROM deps AS build
 COPY . .
 ARG VITE_GOOGLE_CLIENT_ID
 ARG VITE_GOOGLE_API_KEY
