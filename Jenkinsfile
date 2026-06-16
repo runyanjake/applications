@@ -32,14 +32,18 @@ pipeline {
     }
 
     stage('Lint & Type-check') {
+      agent {
+        docker {
+          image 'node:22-alpine'
+          reuseNode true
+        }
+      }
       steps {
         sh '''
           set -eu
-          docker run --rm -v "$PWD":/app -w /app node:22-alpine sh -ec '
-            npm ci
-            npm run lint
-            npx tsc -b
-          '
+          npm ci
+          npm run lint
+          npx tsc -b
         '''
       }
     }
