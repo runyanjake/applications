@@ -12,6 +12,13 @@ interface SalaryRangeChartProps {
   height?: number;
 }
 
+interface SalaryTooltipParam {
+  name: string;
+  seriesName: string;
+  marker: string;
+  value: number;
+}
+
 export function SalaryRangeChart({ data, title, height = 300 }: SalaryRangeChartProps) {
   if (data.length === 0) return null;
 
@@ -20,7 +27,7 @@ export function SalaryRangeChart({ data, title, height = 300 }: SalaryRangeChart
   const option = {
     tooltip: {
       trigger: "axis",
-      formatter: (params: any[]) => {
+      formatter: (params: SalaryTooltipParam[]) => {
         const label = params[0]?.name ?? "";
         const rows = params.map((p) => `${p.marker}${p.seriesName}: <b>${fmt(p.value)}</b>`).join("<br/>");
         return `${label}<br/>${rows}`;

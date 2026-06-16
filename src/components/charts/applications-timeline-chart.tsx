@@ -21,6 +21,13 @@ interface ApplicationsTimelineChartProps {
   height?: number;
 }
 
+interface TimelineTooltipParam {
+  axisValue: number;
+  seriesName: string;
+  marker: string;
+  value: [number, number];
+}
+
 export function ApplicationsTimelineChart({
   data,
   title,
@@ -36,9 +43,10 @@ export function ApplicationsTimelineChart({
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "cross" },
-      formatter: (params: any[]) => {
-        if (!params.length) return "";
-        const ts = params[0]?.axisValue;
+      formatter: (params: TimelineTooltipParam[]) => {
+        const first = params[0];
+        if (!first) return "";
+        const ts = first.axisValue;
         const header = `<b>${formatDate(new Date(ts).toISOString())}</b>`;
         const rows = params
           .filter((p) => p.value[1] > 0)
