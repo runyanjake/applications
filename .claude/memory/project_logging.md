@@ -26,6 +26,19 @@ JSON at `/app/logs`, bind-mounted from `${LOG_DIR}` (default
 - `log.audit(event, data)` records CRUD (`application.created` / `.updated` / `.deleted`).
   Updates log changed *field names* only, never the values the user typed.
 
+**Traefik: the app container is on two networks**
+Adding the private `applications` bridge network put `app` on two networks. Traefik cannot then
+infer which network to reach it on, silently fails to build the service, and serves its own plain
+text `404 page not found` for the whole site. The fix is the
+`traefik.docker.network=traefik` label — it is required, not cosmetic. There is also no
+`depends_on` between app and logger on purpose: nginx resolves the sink lazily per request, so a
+broken log sink must never take the site down.
+
+**Both transports, always**
+`createFileLogger` attaches the rotating file transport *and* a Console transport, so every event
+appears in `docker logs applications-logger` as well as in the file. Errors go to stderr
+(`stderrLevels`). `LOG_CONSOLE_FORMAT=json` switches the console to JSON for collectors.
+
 **CI integration (Jenkinsfile)**
 - Teardown removes **both** fixed container names (`applications`, `applications-logger`);
   `docker compose down` alone does not reap them and `up` then fails with "name already in use".

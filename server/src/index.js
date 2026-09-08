@@ -12,6 +12,8 @@ const LEVEL = process.env.LOG_LEVEL ?? "info";
 // Daily by default; set to e.g. "1h" + "YYYY-MM-DD-HH" for hourly files.
 const ROTATE_FREQUENCY = process.env.LOG_ROTATE_FREQUENCY ?? "1d";
 const ROTATE_PATTERN = process.env.LOG_ROTATE_PATTERN ?? "YYYY-MM-DD";
+// "pretty" for reading `docker logs`, "json" when a collector consumes the stream.
+const CONSOLE_FORMAT = process.env.LOG_CONSOLE_FORMAT ?? "pretty";
 
 /** Requests are tiny batches of events; anything larger is malformed or abuse. */
 const MAX_BODY_BYTES = 64 * 1024;
@@ -23,6 +25,7 @@ const { logger, rotate } = createFileLogger({
   level: LEVEL,
   datePattern: ROTATE_PATTERN,
   frequency: ROTATE_FREQUENCY,
+  consoleFormat: CONSOLE_FORMAT,
 });
 
 rotate.on("rotate", (oldFile, newFile) => {

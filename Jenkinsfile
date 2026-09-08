@@ -28,6 +28,11 @@ pipeline {
           : "${VITE_GOOGLE_CLIENT_ID:?}" "${VITE_GOOGLE_API_KEY:?}"
           docker network inspect traefik >/dev/null 2>&1 || { echo "missing docker network 'traefik'" >&2; exit 1; }
           docker compose -f "$COMPOSE_FILE" config -q
+
+          # Surface the resolved Traefik routing in the build log. The Host rule
+          # honours $DOMAIN, so an unexpected value in the agent environment would
+          # otherwise show up only as a silent 404 from Traefik in production.
+          docker compose -f "$COMPOSE_FILE" config | grep -E 'routers\.jat\.rule|docker\.network' || true
         '''
       }
     }

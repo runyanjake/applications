@@ -25,6 +25,18 @@ Rotation is time based (`LOG_ROTATE_FREQUENCY`, default `1d`) and retention is e
 days (`LOG_RETENTION`, default `30d`), so files older than the window are deleted automatically.
 No logrotate or cron is involved.
 
+Every event is fanned out to **both** destinations at once — the rotating file *and* the
+container's stdout/stderr — so the same stream is visible live without touching the volume:
+
+```bash
+docker logs -f applications-logger
+03:18:20.649 INFO  [applications] application.created {"data":{"id":"a1","company":"Acme"},...}
+03:18:20.650 ERROR [sync] Load from spreadsheet failed: caller lacks permission (HTTP 403)
+```
+
+Errors go to stderr, everything else to stdout. Set `LOG_CONSOLE_FORMAT=json` when a log
+collector consumes the docker stream; the file is always JSON regardless.
+
 **What gets recorded**
 - CRUD on applications — `application.created`, `application.updated` (field names and any
   status transition, never the field values), `application.deleted`
@@ -117,7 +129,8 @@ shipping quietly disables itself after a few attempts.
 
 ## Running (Prod)
 ```bash
-docker compose down && docker system prune -af && docker compose up -d && docker logs -f applications
+docker compose down && docker system prune -af && docker compose up -d
+docker logs -f applications-logger   # live application + error events
 ```
 The build fails fast if `VITE_GOOGLE_CLIENT_ID` or `VITE_GOOGLE_API_KEY` is missing, since Vite
 inlines both at build time and a bundle without them cannot reach Google.
@@ -126,8 +139,8 @@ Deploys normally go through the Jenkins pipeline (`Jenkinsfile`), which lints an
 `docker build --target ci`, redeploys, then health-checks and smoke-tests both containers.
 
 This brings up two containers: `applications` (nginx + the built SPA, published through Traefik)
-and `applications-logger` (the log sink, reachable only on the private `applications-internal`
-network). The log directory on the host must exist and be writable by the container:
+and `applications-logger` (the log sink, reachable only on the private `applications`
+bridge network). The log directory on the host must exist and be writable by the container:
 
 ```bash
 sudo mkdir -p /pwspool/software/applications/logs

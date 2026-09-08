@@ -1,8 +1,11 @@
 networks:
   traefik:
     external: true
-  # Private network so nginx can reach the log sink without exposing it
-  applications-internal:
+  # Private network so nginx can reach the log sink without exposing it.
+  # `name` pins the real network to "applications"; without it compose would
+  # prefix the project name and create "applications_applications".
+  applications:
+    name: applications
     driver: bridge
 
 services:
@@ -14,13 +17,17 @@ services:
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_GOOGLE_API_KEY: ${VITE_GOOGLE_API_KEY}
     restart: unless-stopped
-    depends_on:
-      - logger
+    # Deliberately no depends_on: nginx resolves the log sink lazily per request,
+    # so a broken or missing logger must never stop the site from serving.
     networks:
       - traefik
-      - applications-internal
+      - applications
     labels:
       - traefik.enable=true
+      # REQUIRED: this container sits on two networks, and without this label
+      # Traefik cannot tell which one to reach it on — it then fails to build the
+      # service and answers requests with its own "404 page not found".
+      - traefik.docker.network=traefik
       - traefik.http.routers.jat.rule=Host(`${DOMAIN:-apply.whitney.rip}`)
       - traefik.http.routers.jat.tls=true
       - traefik.http.routers.jat.tls.certresolver=lets-encrypt
@@ -35,7 +42,7 @@ services:
       context: ./server
     restart: unless-stopped
     networks:
-      - applications-internal
+      - applications
     environment:
       LOG_RETENTION: ${LOG_RETENTION:-30d}
       LOG_ROTATE_FREQUENCY: ${LOG_ROTATE_FREQUENCY:-1d}
