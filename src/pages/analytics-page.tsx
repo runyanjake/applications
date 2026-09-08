@@ -39,8 +39,13 @@ export function AnalyticsPage() {
         description={`Insights from ${filteredApplications.length} of ${applications.length} applications · ${describeDateRange(filters)}`}
       />
 
-      <div className="mb-6">
-        <ApplicationFiltersBar filters={filters} onChange={setFilters} />
+      {/* Same treatment as the Report page: the bar owns the row */}
+      <div className="mb-6 flex items-start gap-3">
+        <ApplicationFiltersBar
+          filters={filters}
+          onChange={setFilters}
+          className="flex-1"
+        />
       </div>
 
       {!charts ? (

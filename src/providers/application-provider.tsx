@@ -34,6 +34,7 @@ const audit = createLogger("applications");
 
 const SESSION_KEY = "applications";
 const SYNC_STATE_KEY = "sync-state";
+const FILTERS_KEY = "filters";
 
 /** Names of the fields an update actually changes, for the audit trail. */
 function changedFields(
@@ -61,10 +62,11 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   const [applications, setApplications] = useState<Application[]>(
     () => sessionGet<Application[]>(SESSION_KEY) ?? [],
   );
-  // Shared by the Applications, Analytics and Report pages
-  const [filters, setFilters] = useState<ApplicationFilters>({
-    datePreset: "all",
-  });
+  // Shared by every page that shows application data, and persisted so a
+  // refresh does not silently widen the period back out to All Time
+  const [filters, setFiltersState] = useState<ApplicationFilters>(
+    () => sessionGet<ApplicationFilters>(FILTERS_KEY) ?? { datePreset: "all" },
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<SyncState>(
@@ -313,6 +315,11 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     [applications],
   );
 
+  const setFilters = useCallback((next: ApplicationFilters) => {
+    setFiltersState(next);
+    sessionSet(FILTERS_KEY, next);
+  }, []);
+
   const dateBounds = useMemo(() => resolveDateBounds(filters), [filters]);
 
   const filteredApplications = useMemo(
@@ -350,6 +357,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       forceOverwrite,
       loadFromRemote,
       filters,
+      setFilters,
       filteredApplications,
       dateBounds,
       getFilteredApplications,

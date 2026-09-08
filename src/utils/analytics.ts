@@ -72,25 +72,31 @@ export function buildStatusTimeline(
 ): StatusTimelinePoint[] {
   const events: StatusEvent[] = [];
   for (const app of applications) {
-    if (app.history.length > 0) {
-      events.push(...app.history);
+    // `history` is absent on records restored from an older session payload,
+    // which is how a refresh could reach this with undefined here — the sheet
+    // mapper guards the same field on the way out.
+    const history = app.history ?? [];
+    if (history.length > 0) {
+      events.push(...history);
     } else {
       // Legacy application with no history: treat it as a single creation event
       events.push({ ts: app.lastUpdated, from: null, to: app.status });
     }
   }
-  if (events.length === 0) return [];
+  // A missing timestamp would sort unpredictably and plot as an Invalid Date
+  const dated = events.filter((event) => Boolean(event.ts));
+  if (dated.length === 0) return [];
 
-  events.sort((a, b) => a.ts.localeCompare(b.ts));
+  dated.sort((a, b) => a.ts.localeCompare(b.ts));
 
   const counts = { ...ZERO_COUNTS };
   const points: StatusTimelinePoint[] = [];
 
-  for (let i = 0; i < events.length; ) {
-    const ts = events[i]!.ts;
+  for (let i = 0; i < dated.length; ) {
+    const ts = dated[i]!.ts;
     // Collapse every event sharing this timestamp into one point
-    while (i < events.length && events[i]!.ts === ts) {
-      const { from, to } = events[i]!;
+    while (i < dated.length && dated[i]!.ts === ts) {
+      const { from, to } = dated[i]!;
       if (from !== null) counts[from]--;
       counts[to]++;
       i++;

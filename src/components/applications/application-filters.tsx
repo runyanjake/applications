@@ -14,6 +14,12 @@ interface ApplicationFiltersBarProps {
   filters: ApplicationFilters;
   onChange: (filters: ApplicationFilters) => void;
   className?: string;
+  /**
+   * "full" is the whole bar: period, search and the expandable filters.
+   * "period" is the period picker alone, for pages that only scope by time —
+   * same state, same presets, just less chrome.
+   */
+  variant?: "full" | "period";
 }
 
 const smallSelect =
@@ -56,6 +62,7 @@ export function ApplicationFiltersBar({
   filters,
   onChange,
   className = "",
+  variant = "full",
 }: ApplicationFiltersBarProps) {
   const preset = datePresetOf(filters);
   // Open the drawer on custom periods so the dates driving the view are visible
@@ -82,6 +89,19 @@ export function ApplicationFiltersBar({
     preset === "custom"
       ? [...DATE_PRESET_OPTIONS, { value: "custom" as const, label: "Custom" }]
       : DATE_PRESET_OPTIONS;
+
+  // Period-only: the bare picker, no card, for pages that scope by time alone
+  if (variant === "period") {
+    return (
+      <SegmentedControl
+        options={presetOptions}
+        value={preset}
+        onChange={selectPreset}
+        size="sm"
+        className={className}
+      />
+    );
+  }
 
   return (
     <Card className={`p-3 ${className}`}>

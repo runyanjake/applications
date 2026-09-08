@@ -1,38 +1,28 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Application } from "../../types/application";
 import { ROUTES } from "../../config/routes";
 import { formatRelativeDate } from "../../utils/formatters";
-import { SegmentedControl } from "../ui/segmented-control";
+import { isWithinBounds, type DateBounds } from "../../utils/date-range";
 import { StatusBadge } from "../applications/status-badge";
-
-type Period = "day" | "week" | "month" | "quarter" | "year";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const PERIODS = [
-  { value: "day", label: "Day", days: 1 },
-  { value: "week", label: "Week", days: 7 },
-  { value: "month", label: "Month", days: 30 },
-  { value: "quarter", label: "Quarter", days: 90 },
-  { value: "year", label: "Year", days: 365 },
-] as const satisfies readonly { value: Period; label: string; days: number }[];
 
 const HEADER_CLASS =
   "px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500";
 
+interface RecentApplicationsProps {
+  applications: Application[];
+  /** The shared period, applied to `lastUpdated` rather than `dateApplied`. */
+  bounds: DateBounds;
+  periodLabel: string;
+}
+
 export function RecentApplications({
   applications,
-}: {
-  applications: Application[];
-}) {
-  const [period, setPeriod] = useState<Period>("day");
-
-  const selected = PERIODS.find((p) => p.value === period) ?? PERIODS[0];
-  const cutoff = Date.now() - selected.days * DAY_MS;
-
+  bounds,
+  periodLabel,
+}: RecentApplicationsProps) {
+  // This list is about recent activity, so it keys on when a record last moved
   const recent = applications
-    .filter((app) => new Date(app.lastUpdated).getTime() >= cutoff)
+    .filter((app) => isWithinBounds(app.lastUpdated, bounds))
     .sort(
       (a, b) =>
         new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime(),
@@ -52,19 +42,10 @@ export function RecentApplications({
         </Link>
       </div>
 
-      <SegmentedControl
-        options={PERIODS}
-        value={period}
-        onChange={setPeriod}
-        size="sm"
-        className="mb-3"
-      />
-
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         {recent.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-gray-400">
-            No applications updated in the past{" "}
-            {selected.label.toLowerCase()}.
+            No applications updated in this period ({periodLabel}).
           </p>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">

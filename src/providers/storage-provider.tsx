@@ -21,7 +21,7 @@ import {
 const log = createLogger("storage");
 
 /** Session keys owned by ApplicationProvider — cleared when the sheet changes. */
-const APP_SESSION_KEYS = ["applications", "sync-state"] as const;
+const APP_SESSION_KEYS = ["applications", "sync-state", "filters"] as const;
 
 const SESSION_KEY = "storage:spreadsheet";
 const SHEET_NAME = "Applications";
