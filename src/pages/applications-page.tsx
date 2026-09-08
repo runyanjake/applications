@@ -1,7 +1,5 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApplications } from "../hooks/use-applications";
-import type { ApplicationFilters } from "../types/application";
 import { ROUTES } from "../config/routes";
 import { PageHeader } from "../components/ui/page-header";
 import { EmptyState } from "../components/ui/empty-state";
@@ -10,15 +8,14 @@ import { ApplicationFiltersBar } from "../components/applications/application-fi
 import { ApplicationTable } from "../components/applications/application-table";
 
 export function ApplicationsPage() {
-  const { applications, getFilteredApplications } = useApplications();
-  const [filters, setFilters] = useState<ApplicationFilters>({});
-  const filtered = getFilteredApplications(filters);
+  const { applications, filters, setFilters, filteredApplications } =
+    useApplications();
 
   return (
     <RequireSpreadsheet>
       <PageHeader
         title="Applications"
-        description={`${filtered.length} of ${applications.length} applications`}
+        description={`${filteredApplications.length} of ${applications.length} applications`}
         action={
           <Link
             to={ROUTES.ADD}
@@ -33,7 +30,7 @@ export function ApplicationsPage() {
         <ApplicationFiltersBar filters={filters} onChange={setFilters} />
       </div>
 
-      {filtered.length === 0 ? (
+      {filteredApplications.length === 0 ? (
         <EmptyState
           title="No matching applications"
           description={
@@ -43,7 +40,7 @@ export function ApplicationsPage() {
           }
         />
       ) : (
-        <ApplicationTable applications={filtered} />
+        <ApplicationTable applications={filteredApplications} />
       )}
     </RequireSpreadsheet>
   );

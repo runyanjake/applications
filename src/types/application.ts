@@ -110,11 +110,30 @@ export interface Application {
 
 export type ApplicationFormData = Omit<Application, "id" | "lastUpdated" | "history">;
 
+/**
+ * The period a view covers. The relative presets are trailing windows ending
+ * today; "custom" defers to the explicit dateRange below.
+ */
+export const DATE_PRESETS = [
+  "day",
+  "week",
+  "month",
+  "quarter",
+  "year",
+  "all",
+  "custom",
+] as const;
+
+export type DatePreset = (typeof DATE_PRESETS)[number];
+
 export interface ApplicationFilters {
   status?: ApplicationStatus[];
   interest?: InterestLevel[];
   companyName?: string;
   remote?: boolean | null;
+  /** Defaults to "all" when absent. */
+  datePreset?: DatePreset;
+  /** Only consulted when datePreset is "custom". */
   dateRange?: { from: string; to: string };
   search?: string;
 }

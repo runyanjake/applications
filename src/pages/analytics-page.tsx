@@ -5,9 +5,11 @@ import { PageHeader } from "../components/ui/page-header";
 import { EmptyState } from "../components/ui/empty-state";
 import { Card } from "../components/ui/card";
 import { RequireSpreadsheet } from "../components/routing/require-spreadsheet";
+import { ApplicationFiltersBar } from "../components/applications/application-filters";
 import { DonutChart } from "../components/charts/donut-chart";
 import { StatusTimelineChart } from "../components/charts/status-timeline-chart";
 import { ApplicationPipelineSankey } from "../components/charts/application-pipeline-sankey";
+import { describeDateRange } from "../utils/date-range";
 import {
   buildCompanyBreakdown,
   buildStatusBreakdown,
@@ -15,33 +17,40 @@ import {
 } from "../utils/analytics";
 
 export function AnalyticsPage() {
-  const { applications } = useApplications();
+  const { applications, filters, setFilters, filteredApplications } =
+    useApplications();
 
   const charts = useMemo(() => {
-    if (applications.length === 0) return null;
+    if (filteredApplications.length === 0) return null;
     return {
-      status: buildStatusBreakdown(applications),
-      company: buildCompanyBreakdown(applications),
-      timeline: buildStatusTimeline(applications),
-      activeCount: applications.filter((app) =>
+      status: buildStatusBreakdown(filteredApplications),
+      company: buildCompanyBreakdown(filteredApplications),
+      timeline: buildStatusTimeline(filteredApplications),
+      activeCount: filteredApplications.filter((app) =>
         ACTIVE_STATUSES.includes(app.status),
       ).length,
     };
-  }, [applications]);
+  }, [filteredApplications]);
 
   return (
     <RequireSpreadsheet>
       <PageHeader
         title="Analytics"
-        description={
-          charts ? `Insights from ${applications.length} applications` : undefined
-        }
+        description={`Insights from ${filteredApplications.length} of ${applications.length} applications · ${describeDateRange(filters)}`}
       />
+
+      <div className="mb-6">
+        <ApplicationFiltersBar filters={filters} onChange={setFilters} />
+      </div>
 
       {!charts ? (
         <EmptyState
           title="No data to analyze"
-          description="Add some applications to see your analytics."
+          description={
+            applications.length === 0
+              ? "Add some applications to see your analytics."
+              : "No applications match the current filters — try a wider period."
+          }
         />
       ) : (
         <div className="space-y-6">
@@ -77,7 +86,7 @@ export function AnalyticsPage() {
 
           <Card className="p-4">
             <ApplicationPipelineSankey
-              applications={applications}
+              applications={filteredApplications}
               title="Application Pipeline"
               interactive
             />

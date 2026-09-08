@@ -2,19 +2,26 @@ import { useState } from "react";
 import {
   INTEREST_LEVELS,
   type ApplicationFilters,
+  type DatePreset,
 } from "../../types/application";
 import { formatInterest } from "../../utils/formatters";
+import { DATE_PRESET_OPTIONS, datePresetOf } from "../../utils/date-range";
 import { Card } from "../ui/card";
-import { inputClass } from "../ui/field";
+import { SegmentedControl } from "../ui/segmented-control";
 import { StatusOptionGroups } from "./status-options";
 
 interface ApplicationFiltersBarProps {
   filters: ApplicationFilters;
   onChange: (filters: ApplicationFilters) => void;
+  className?: string;
 }
 
 const smallSelect =
   "w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm";
+
+/** The compact sibling of `inputClass`, sized to sit level with the buttons. */
+const smallInput =
+  "rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
 
 function FilterField({
   label,
@@ -33,54 +40,89 @@ function FilterField({
   );
 }
 
-/** Count of active filters, ignoring the always-visible search box. */
-function countActive(filters: ApplicationFilters): number {
+/**
+ * Count of the filters hidden behind the Filters button. The period and the
+ * search box are always on screen, so counting them would be double-reporting.
+ */
+function countHidden(filters: ApplicationFilters): number {
   return (
     (filters.status?.length ? 1 : 0) +
     (filters.interest?.length ? 1 : 0) +
-    (filters.remote != null ? 1 : 0) +
-    (filters.dateRange?.from || filters.dateRange?.to ? 1 : 0)
+    (filters.remote != null ? 1 : 0)
   );
 }
 
 export function ApplicationFiltersBar({
   filters,
   onChange,
+  className = "",
 }: ApplicationFiltersBarProps) {
-  const [expanded, setExpanded] = useState(false);
+  const preset = datePresetOf(filters);
+  // Open the drawer on custom periods so the dates driving the view are visible
+  const [expanded, setExpanded] = useState(preset === "custom");
 
   const update = (patch: Partial<ApplicationFilters>) =>
     onChange({ ...filters, ...patch });
 
-  const activeCount = countActive(filters);
+  const selectPreset = (next: DatePreset) =>
+    update({ datePreset: next, dateRange: undefined });
+
+  /** Typing an explicit date is what puts the period into "custom". */
+  const setCustomRange = (from: string, to: string) =>
+    from || to
+      ? update({ datePreset: "custom", dateRange: { from, to } })
+      : update({ datePreset: "all", dateRange: undefined });
+
+  const hiddenCount = countHidden(filters);
+  const canClear = hiddenCount > 0 || preset !== "all";
+
+  // "Custom" is reachable only through the date inputs, so it appears as a
+  // segment just to show where the current period came from.
+  const presetOptions =
+    preset === "custom"
+      ? [...DATE_PRESET_OPTIONS, { value: "custom" as const, label: "Custom" }]
+      : DATE_PRESET_OPTIONS;
 
   return (
-    <Card className="p-4">
-      <div className="flex items-center gap-4">
+    <Card className={`p-3 ${className}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <SegmentedControl
+          options={presetOptions}
+          value={preset}
+          onChange={selectPreset}
+          size="sm"
+        />
+
         <input
           type="text"
-          placeholder="Search by position, company, or notes..."
+          placeholder="Search position, company, or notes..."
           value={filters.search ?? ""}
           onChange={(e) => update({ search: e.target.value || undefined })}
-          className={`flex-1 ${inputClass}`}
+          className={`min-w-[12rem] flex-1 ${smallInput}`}
         />
+
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          aria-expanded={expanded}
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Filters
-          {activeCount > 0 && (
+          {hiddenCount > 0 && (
             <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-xs text-indigo-700">
-              {activeCount}
+              {hiddenCount}
             </span>
           )}
+          <span className="text-xs text-gray-400">{expanded ? "▲" : "▼"}</span>
         </button>
-        {activeCount > 0 && (
+
+        {canClear && (
           <button
             type="button"
-            onClick={() => onChange({ search: filters.search })}
-            className="text-sm text-gray-500 hover:text-gray-700"
+            onClick={() =>
+              onChange({ search: filters.search, datePreset: "all" })
+            }
+            className="whitespace-nowrap px-1 text-sm text-gray-500 hover:text-gray-700"
           >
             Clear
           </button>
@@ -88,7 +130,7 @@ export function ApplicationFiltersBar({
       </div>
 
       {expanded && (
-        <div className="mt-4 grid gap-4 border-t border-gray-100 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3 grid gap-3 border-t border-gray-100 pt-3 sm:grid-cols-2 lg:grid-cols-4">
           <FilterField label="Status">
             <select
               multiple
@@ -145,32 +187,28 @@ export function ApplicationFiltersBar({
             </select>
           </FilterField>
 
-          <FilterField label="Date Applied">
+          <FilterField label="Custom Date Applied">
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                value={filters.dateRange?.from ?? ""}
+                value={preset === "custom" ? (filters.dateRange?.from ?? "") : ""}
                 onChange={(e) =>
-                  update({
-                    dateRange: {
-                      from: e.target.value,
-                      to: filters.dateRange?.to ?? "",
-                    },
-                  })
+                  setCustomRange(
+                    e.target.value,
+                    preset === "custom" ? (filters.dateRange?.to ?? "") : "",
+                  )
                 }
                 className={smallSelect}
               />
               <span className="text-gray-400">-</span>
               <input
                 type="date"
-                value={filters.dateRange?.to ?? ""}
+                value={preset === "custom" ? (filters.dateRange?.to ?? "") : ""}
                 onChange={(e) =>
-                  update({
-                    dateRange: {
-                      from: filters.dateRange?.from ?? "",
-                      to: e.target.value,
-                    },
-                  })
+                  setCustomRange(
+                    preset === "custom" ? (filters.dateRange?.from ?? "") : "",
+                    e.target.value,
+                  )
                 }
                 className={smallSelect}
               />

@@ -19,6 +19,7 @@ import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
 import { describeGoogleError, isAuthError } from "../utils/google-error";
 import { createLogger } from "../utils/logger";
 import { matchesFilters } from "../utils/filter-applications";
+import { resolveDateBounds } from "../utils/date-range";
 import {
   computeVersion,
   shouldAutoSync,
@@ -60,6 +61,10 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   const [applications, setApplications] = useState<Application[]>(
     () => sessionGet<Application[]>(SESSION_KEY) ?? [],
   );
+  // Shared by the Applications, Analytics and Report pages
+  const [filters, setFilters] = useState<ApplicationFilters>({
+    datePreset: "all",
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncState, setSyncState] = useState<SyncState>(
@@ -301,9 +306,18 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   }, [isConfigured, storageService]);
 
   const getFilteredApplications = useCallback(
-    (filters: ApplicationFilters) =>
-      applications.filter((app) => matchesFilters(app, filters)),
+    (query: ApplicationFilters) => {
+      const bounds = resolveDateBounds(query);
+      return applications.filter((app) => matchesFilters(app, query, bounds));
+    },
     [applications],
+  );
+
+  const dateBounds = useMemo(() => resolveDateBounds(filters), [filters]);
+
+  const filteredApplications = useMemo(
+    () => applications.filter((app) => matchesFilters(app, filters, dateBounds)),
+    [applications, filters, dateBounds],
   );
 
   const value = useMemo(
@@ -318,6 +332,10 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       sync,
       forceOverwrite,
       reloadFromRemote: loadFromRemote,
+      filters,
+      setFilters,
+      filteredApplications,
+      dateBounds,
       getFilteredApplications,
     }),
     [
@@ -331,6 +349,9 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       sync,
       forceOverwrite,
       loadFromRemote,
+      filters,
+      filteredApplications,
+      dateBounds,
       getFilteredApplications,
     ],
   );
