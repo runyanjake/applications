@@ -32,8 +32,10 @@ pipeline {
           # Surface the resolved Traefik routing in the build log. The Host rule
           # honours $DOMAIN, so an unexpected value in the agent environment would
           # otherwise show up only as a silent 404 from Traefik in production.
-          # Groovy unescapes '\\.' to '\.' before the shell sees it — a bare '\.'
-          # is not a valid Groovy escape and fails the pipeline at parse time.
+          # The doubled backslashes below are for Groovy, not grep: this block is
+          # a Groovy string, and a lone backslash-dot is not a valid escape there,
+          # so it fails the whole pipeline at parse time. Groovy halves them and
+          # grep receives a normal escaped-dot regex.
           docker compose -f "$COMPOSE_FILE" config | grep -E 'routers\\.jat\\.rule|docker\\.network' || true
         '''
       }
