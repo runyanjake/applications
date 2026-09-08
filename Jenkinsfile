@@ -32,7 +32,9 @@ pipeline {
           # Surface the resolved Traefik routing in the build log. The Host rule
           # honours $DOMAIN, so an unexpected value in the agent environment would
           # otherwise show up only as a silent 404 from Traefik in production.
-          docker compose -f "$COMPOSE_FILE" config | grep -E 'routers\.jat\.rule|docker\.network' || true
+          # Groovy unescapes '\\.' to '\.' before the shell sees it — a bare '\.'
+          # is not a valid Groovy escape and fails the pipeline at parse time.
+          docker compose -f "$COMPOSE_FILE" config | grep -E 'routers\\.jat\\.rule|docker\\.network' || true
         '''
       }
     }
