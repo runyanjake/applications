@@ -18,5 +18,9 @@ export function sessionSet<T>(key: string, value: T): void {
 }
 
 export function sessionRemove(key: string): void {
-  sessionStorage.removeItem(PREFIX + key);
+  try {
+    sessionStorage.removeItem(PREFIX + key);
+  } catch {
+    // Storage disabled or unavailable — nothing to clean up
+  }
 }

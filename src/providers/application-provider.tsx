@@ -161,6 +161,10 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       sessionRemove(SESSION_KEY);
       setSyncState(INITIAL_SYNC_STATE);
       sessionRemove(SYNC_STATE_KEY);
+      // The filter describes a dataset that no longer exists — drop it here too,
+      // or the next spreadsheet loads behind the previous one's period.
+      setFiltersState({ datePreset: "all" });
+      sessionRemove(FILTERS_KEY);
       return;
     }
     if (!accessToken) return; // not signed in yet — this effect re-runs when it is

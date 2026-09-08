@@ -1,21 +1,26 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/use-auth";
+import { useStorage } from "../../hooks/use-storage";
 import { ROUTES } from "../../config/routes";
 import { UserMenu } from "../auth/user-menu";
 import { LoginButton } from "../auth/login-button";
 import { SyncIndicator } from "../sync/sync-indicator";
 
+/** `needsData` links are gated on a spreadsheet and would bounce home without one. */
 const NAV_LINKS = [
-  { to: ROUTES.HOME, label: "Dashboard" },
-  { to: ROUTES.APPLICATIONS, label: "Applications" },
-  { to: ROUTES.ANALYTICS, label: "Analytics" },
-  { to: ROUTES.ADD, label: "Add" },
-  { to: ROUTES.REPORT, label: "Report" },
+  { to: ROUTES.HOME, label: "Dashboard", needsData: false },
+  { to: ROUTES.APPLICATIONS, label: "Applications", needsData: true },
+  { to: ROUTES.ANALYTICS, label: "Analytics", needsData: true },
+  { to: ROUTES.ADD, label: "Add", needsData: true },
+  { to: ROUTES.REPORT, label: "Report", needsData: true },
 ] as const;
 
 export function Navbar() {
   const { state } = useAuth();
+  const { isConfigured } = useStorage();
   const location = useLocation();
+
+  const links = NAV_LINKS.filter((link) => isConfigured || !link.needsData);
 
   return (
     <nav className="border-b border-gray-200 bg-white print:hidden">
@@ -30,7 +35,7 @@ export function Navbar() {
 
           {state.isAuthenticated && (
             <div className="hidden items-center gap-1 sm:flex">
-              {NAV_LINKS.map(({ to, label }) => {
+              {links.map(({ to, label }) => {
                 const isActive =
                   to === ROUTES.HOME
                     ? location.pathname === "/"

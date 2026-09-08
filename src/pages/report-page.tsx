@@ -6,6 +6,8 @@ import { formatStatus } from "../utils/formatters";
 import { describeDateRange, isWithinBounds } from "../utils/date-range";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { PageHeader } from "../components/ui/page-header";
+import { EmptyState } from "../components/ui/empty-state";
 import { RequireSpreadsheet } from "../components/routing/require-spreadsheet";
 import { ApplicationFiltersBar } from "../components/applications/application-filters";
 import { ApplicationPipelineSankey } from "../components/charts/application-pipeline-sankey";
@@ -30,6 +32,7 @@ function StatCard({
 
 export function ReportPage() {
   const {
+    applications,
     filters,
     setFilters,
     filteredApplications,
@@ -75,6 +78,19 @@ export function ReportPage() {
     month: "long",
     day: "numeric",
   });
+
+  // A report over nothing is just zeroes — say so rather than printing them
+  if (applications.length === 0) {
+    return (
+      <RequireSpreadsheet>
+        <PageHeader title="Report" />
+        <EmptyState
+          title="Nothing to report yet"
+          description="Add some applications to generate a status report."
+        />
+      </RequireSpreadsheet>
+    );
+  }
 
   return (
     <RequireSpreadsheet>

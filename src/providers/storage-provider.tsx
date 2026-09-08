@@ -157,11 +157,16 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   const clearSpreadsheet = useCallback(() => {
     resetService(service.current);
+    // Disconnecting must not reopen the picker. Marking the prompt as spent is
+    // what makes that true: the auto-prompt effect only sets this ref when it
+    // actually fires, so a session that started with a spreadsheet already in
+    // storage still has it false. Without this line, clearing the spreadsheet
+    // satisfies every condition in that effect and drops the picker's modal
+    // backdrop over the page — which reads as a white, unclickable screen.
+    hasPrompted.current = true;
     setSpreadsheet(null);
     setError(null);
     setPendingSheetCreation(null);
-    // hasPrompted stays set: disconnecting should not immediately reopen the
-    // picker — the user re-selects from the setup screen when ready.
   }, []);
 
   const value = useMemo(
