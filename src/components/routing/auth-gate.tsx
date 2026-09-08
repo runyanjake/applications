@@ -1,5 +1,5 @@
 import { useAuth } from "../../hooks/use-auth";
-import { LoadingSpinner } from "../shared/loading-spinner";
+import { LoadingSpinner } from "../ui/loading-spinner";
 
 interface AuthGateProps {
   authenticated: React.ReactNode;

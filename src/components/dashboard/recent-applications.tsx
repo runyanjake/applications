@@ -3,36 +3,36 @@ import { Link } from "react-router-dom";
 import type { Application } from "../../types/application";
 import { ROUTES } from "../../config/routes";
 import { formatRelativeDate } from "../../utils/formatters";
+import { SegmentedControl } from "../ui/segmented-control";
 import { StatusBadge } from "../applications/status-badge";
 
 type Period = "day" | "week" | "month" | "quarter" | "year";
 
-const PERIOD_LABELS: Record<Period, string> = {
-  day: "Day",
-  week: "Week",
-  month: "Month",
-  quarter: "Quarter",
-  year: "Year",
-};
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-const PERIOD_MS: Record<Period, number> = {
-  day: 24 * 60 * 60 * 1000,
-  week: 7 * 24 * 60 * 60 * 1000,
-  month: 30 * 24 * 60 * 60 * 1000,
-  quarter: 90 * 24 * 60 * 60 * 1000,
-  year: 365 * 24 * 60 * 60 * 1000,
-};
+const PERIODS = [
+  { value: "day", label: "Day", days: 1 },
+  { value: "week", label: "Week", days: 7 },
+  { value: "month", label: "Month", days: 30 },
+  { value: "quarter", label: "Quarter", days: 90 },
+  { value: "year", label: "Year", days: 365 },
+] as const satisfies readonly { value: Period; label: string; days: number }[];
 
-interface RecentApplicationsProps {
+const HEADER_CLASS =
+  "px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500";
+
+export function RecentApplications({
+  applications,
+}: {
   applications: Application[];
-}
-
-export function RecentApplications({ applications }: RecentApplicationsProps) {
+}) {
   const [period, setPeriod] = useState<Period>("day");
 
-  const cutoff = Date.now() - PERIOD_MS[period];
-  const recent = [...applications]
-    .filter((a) => new Date(a.lastUpdated).getTime() >= cutoff)
+  const selected = PERIODS.find((p) => p.value === period) ?? PERIODS[0];
+  const cutoff = Date.now() - selected.days * DAY_MS;
+
+  const recent = applications
+    .filter((app) => new Date(app.lastUpdated).getTime() >= cutoff)
     .sort(
       (a, b) =>
         new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime(),
@@ -52,44 +52,28 @@ export function RecentApplications({ applications }: RecentApplicationsProps) {
         </Link>
       </div>
 
-      {/* Period selector */}
-      <div className="mb-3 flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
-        {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-              period === p
-                ? "bg-white text-indigo-600 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {PERIOD_LABELS[p]}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        options={PERIODS}
+        value={period}
+        onChange={setPeriod}
+        size="sm"
+        className="mb-3"
+      />
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         {recent.length === 0 ? (
           <p className="px-4 py-6 text-center text-sm text-gray-400">
-            No applications updated in the past {PERIOD_LABELS[period].toLowerCase()}.
+            No applications updated in the past{" "}
+            {selected.label.toLowerCase()}.
           </p>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Position
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Company
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Updated
-                </th>
+                <th className={HEADER_CLASS}>Position</th>
+                <th className={HEADER_CLASS}>Company</th>
+                <th className={HEADER_CLASS}>Status</th>
+                <th className={HEADER_CLASS}>Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">

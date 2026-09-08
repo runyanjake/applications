@@ -31,7 +31,6 @@ export interface TokenClientConfig {
   error_callback?: (error: { type: string; message?: string }) => void;
 }
 
-/* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   interface Window {
     gapi: {
@@ -101,11 +100,11 @@ declare global {
           revoke(token: string, callback?: () => void): void;
         };
       };
-      picker: {
+      picker?: {
         PickerBuilder: new () => PickerBuilder;
         ViewId: { SPREADSHEETS: string };
         DocsView: new (viewId: string) => DocsView;
-        Action: { PICKED: string; CANCEL: string };
+        Action: { PICKED: string; CANCEL: string; LOADED: string };
         Feature: { NAV_HIDDEN: string };
       };
     };
@@ -126,7 +125,13 @@ declare global {
         }>;
       }) => void,
     ): PickerBuilder;
-    build(): { setVisible(visible: boolean): void };
+    build(): PickerInstance;
+  }
+
+  interface PickerInstance {
+    setVisible(visible: boolean): void;
+    /** Removes the picker's DOM nodes; required before opening another one. */
+    dispose(): void;
   }
 
   interface DocsView {

@@ -1,16 +1,46 @@
 import { useState } from "react";
 import {
   INTEREST_LEVELS,
-  PRE_INTERVIEW_STATUSES,
-  ACTIVE_STATUSES,
-  COMPLETE_STATUSES,
   type ApplicationFilters,
 } from "../../types/application";
-import { formatStatus } from "../../utils/formatters";
+import { formatInterest } from "../../utils/formatters";
+import { Card } from "../ui/card";
+import { inputClass } from "../ui/field";
+import { StatusOptionGroups } from "./status-options";
 
 interface ApplicationFiltersBarProps {
   filters: ApplicationFilters;
   onChange: (filters: ApplicationFilters) => void;
+}
+
+const smallSelect =
+  "w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm";
+
+function FilterField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-gray-500">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+/** Count of active filters, ignoring the always-visible search box. */
+function countActive(filters: ApplicationFilters): number {
+  return (
+    (filters.status?.length ? 1 : 0) +
+    (filters.interest?.length ? 1 : 0) +
+    (filters.remote != null ? 1 : 0) +
+    (filters.dateRange?.from || filters.dateRange?.to ? 1 : 0)
+  );
 }
 
 export function ApplicationFiltersBar({
@@ -22,25 +52,20 @@ export function ApplicationFiltersBar({
   const update = (patch: Partial<ApplicationFilters>) =>
     onChange({ ...filters, ...patch });
 
-  const activeCount =
-    (filters.status?.length ? 1 : 0) +
-    (filters.interest?.length ? 1 : 0) +
-    (filters.remote != null ? 1 : 0) +
-    (filters.dateRange?.from || filters.dateRange?.to ? 1 : 0);
+  const activeCount = countActive(filters);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <Card className="p-4">
       <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <input
-            type="text"
-            placeholder="Search by position, company, or notes..."
-            value={filters.search ?? ""}
-            onChange={(e) => update({ search: e.target.value || undefined })}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="Search by position, company, or notes..."
+          value={filters.search ?? ""}
+          onChange={(e) => update({ search: e.target.value || undefined })}
+          className={`flex-1 ${inputClass}`}
+        />
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
           className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
@@ -53,6 +78,7 @@ export function ApplicationFiltersBar({
         </button>
         {activeCount > 0 && (
           <button
+            type="button"
             onClick={() => onChange({ search: filters.search })}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
@@ -63,10 +89,7 @@ export function ApplicationFiltersBar({
 
       {expanded && (
         <div className="mt-4 grid gap-4 border-t border-gray-100 pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              Status
-            </label>
+          <FilterField label="Status">
             <select
               multiple
               value={filters.status ?? []}
@@ -74,34 +97,17 @@ export function ApplicationFiltersBar({
                 update({
                   status: Array.from(
                     e.target.selectedOptions,
-                    (o) => o.value,
+                    (option) => option.value,
                   ) as ApplicationFilters["status"],
                 })
               }
-              className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              className={smallSelect}
             >
-              <optgroup label="Pre-Interview">
-                {PRE_INTERVIEW_STATUSES.map((s) => (
-                  <option key={s} value={s}>{formatStatus(s)}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Active">
-                {ACTIVE_STATUSES.map((s) => (
-                  <option key={s} value={s}>{formatStatus(s)}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Complete">
-                {COMPLETE_STATUSES.map((s) => (
-                  <option key={s} value={s}>{formatStatus(s)}</option>
-                ))}
-              </optgroup>
+              <StatusOptionGroups />
             </select>
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              Interest
-            </label>
+          <FilterField label="Interest">
             <select
               multiple
               value={filters.interest ?? []}
@@ -109,48 +115,37 @@ export function ApplicationFiltersBar({
                 update({
                   interest: Array.from(
                     e.target.selectedOptions,
-                    (o) => o.value,
+                    (option) => option.value,
                   ) as ApplicationFilters["interest"],
                 })
               }
-              className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              className={smallSelect}
             >
-              {INTEREST_LEVELS.map((l) => (
-                <option key={l} value={l}>
-                  {l.charAt(0).toUpperCase() + l.slice(1)}
+              {INTEREST_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {formatInterest(level)}
                 </option>
               ))}
             </select>
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              Remote
-            </label>
+          <FilterField label="Remote">
             <select
-              value={
-                filters.remote == null ? "" : filters.remote ? "yes" : "no"
-              }
+              value={filters.remote == null ? "" : filters.remote ? "yes" : "no"}
               onChange={(e) =>
                 update({
-                  remote:
-                    e.target.value === ""
-                      ? null
-                      : e.target.value === "yes",
+                  remote: e.target.value === "" ? null : e.target.value === "yes",
                 })
               }
-              className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              className={smallSelect}
             >
               <option value="">All</option>
               <option value="yes">Remote</option>
               <option value="no">On-site</option>
             </select>
-          </div>
+          </FilterField>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">
-              Date Applied
-            </label>
+          <FilterField label="Date Applied">
             <div className="flex items-center gap-2">
               <input
                 type="date"
@@ -163,7 +158,7 @@ export function ApplicationFiltersBar({
                     },
                   })
                 }
-                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                className={smallSelect}
               />
               <span className="text-gray-400">-</span>
               <input
@@ -177,12 +172,12 @@ export function ApplicationFiltersBar({
                     },
                   })
                 }
-                className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                className={smallSelect}
               />
             </div>
-          </div>
+          </FilterField>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

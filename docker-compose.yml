@@ -1,6 +1,9 @@
 networks:
   traefik:
     external: true
+  # Private network so nginx can reach the log sink without exposing it
+  applications-internal:
+    driver: bridge
 
 services:
   app:
@@ -11,12 +14,31 @@ services:
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_GOOGLE_API_KEY: ${VITE_GOOGLE_API_KEY}
     restart: unless-stopped
+    depends_on:
+      - logger
     networks:
       - traefik
+      - applications-internal
     labels:
       - traefik.enable=true
-      - traefik.http.routers.jat.rule=Host(`apply.whitney.rip`)
+      - traefik.http.routers.jat.rule=Host(`${DOMAIN:-apply.whitney.rip}`)
       - traefik.http.routers.jat.tls=true
       - traefik.http.routers.jat.tls.certresolver=lets-encrypt
       - traefik.http.services.jat.loadbalancer.server.port=80
       - traefik.port=80
+
+  # Receives client log events and writes daily-rotated files to the volume.
+  # Not published through traefik — only nginx talks to it.
+  logger:
+    container_name: applications-logger
+    build:
+      context: ./server
+    restart: unless-stopped
+    networks:
+      - applications-internal
+    environment:
+      LOG_RETENTION: ${LOG_RETENTION:-30d}
+      LOG_ROTATE_FREQUENCY: ${LOG_ROTATE_FREQUENCY:-1d}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ${LOG_DIR:-/pwspool/software/applications/logs}:/app/logs

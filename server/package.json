@@ -1,0 +1,14 @@
+{
+  "name": "applications-log-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Receives client log events from the Applications SPA and writes daily-rotated files.",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  }
+}

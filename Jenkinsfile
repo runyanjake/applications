@@ -43,11 +43,12 @@ pipeline {
         sh '''
           set -eu
           docker compose -f "$COMPOSE_FILE" down --remove-orphans || true
-          # The service uses a fixed container_name ("applications"). A prior run
-          # or a different compose project name can leave that container behind,
-          # which "down" won't reap and then "up" fails with "name already in use".
-          # Remove it explicitly by name so the next deploy always gets a clean slate.
-          docker rm -f applications >/dev/null 2>&1 || true
+          # Both services use fixed container_names ("applications" and
+          # "applications-logger"). A prior run or a different compose project name
+          # can leave those containers behind, which "down" won't reap and then "up"
+          # fails with "name already in use". Remove them explicitly by name so the
+          # next deploy always gets a clean slate.
+          docker rm -f applications applications-logger >/dev/null 2>&1 || true
         '''
       }
     }
@@ -62,24 +63,33 @@ pipeline {
       steps {
         sh '''
           set -eu
-          cid="$(docker compose -f "$COMPOSE_FILE" ps -q app)"
-          [ -n "$cid" ] || { echo "app container not found" >&2; exit 1; }
 
-          # The image defines a HEALTHCHECK (wget against 127.0.0.1/healthz); wait
-          # for Docker to report healthy, failing fast on terminal states.
-          deadline=$(( $(date +%s) + 90 ))
-          while :; do
-            status="$(docker inspect -f '{{.State.Status}}' "$cid")"
-            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
-            [ "$status" = "running" ] && [ "$health" = "healthy" ] && break
-            [ "$health" = "unhealthy" ] && { echo "app reported unhealthy" >&2; exit 1; }
-            case "$status" in
-              exited|dead) echo "app container $status before becoming healthy" >&2; exit 1 ;;
-            esac
-            [ "$(date +%s)" -ge "$deadline" ] && { echo "timed out waiting for healthy (status=$status, health=$health)" >&2; exit 1; }
-            sleep 2
-          done
-          echo "app healthy"
+          # Both images define a HEALTHCHECK (nginx: wget /healthz, logger: fetch
+          # /healthz); wait for Docker to report healthy, failing fast on terminal
+          # states. The logger is gated too, so a broken log sink fails the build
+          # instead of crash-looping unnoticed in production.
+          wait_healthy() {
+            svc="$1"
+            cid="$(docker compose -f "$COMPOSE_FILE" ps -q "$svc")"
+            [ -n "$cid" ] || { echo "$svc container not found" >&2; exit 1; }
+
+            deadline=$(( $(date +%s) + 90 ))
+            while :; do
+              status="$(docker inspect -f '{{.State.Status}}' "$cid")"
+              health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
+              [ "$status" = "running" ] && [ "$health" = "healthy" ] && break
+              [ "$health" = "unhealthy" ] && { echo "$svc reported unhealthy" >&2; exit 1; }
+              case "$status" in
+                exited|dead) echo "$svc container $status before becoming healthy" >&2; exit 1 ;;
+              esac
+              [ "$(date +%s)" -ge "$deadline" ] && { echo "timed out waiting for $svc healthy (status=$status, health=$health)" >&2; exit 1; }
+              sleep 2
+            done
+            echo "$svc healthy"
+          }
+
+          wait_healthy app
+          wait_healthy logger
         '''
       }
     }
@@ -97,6 +107,17 @@ pipeline {
             echo "GET / did not return a successful response" >&2; exit 1
           fi
           echo "$body" | grep -q '<div id="root">' || { echo "GET / response missing expected SPA marker" >&2; exit 1; }
+
+          # Prove the logging path end to end: nginx must proxy /api/logs to the
+          # sink, which answers 202 and writes the line to the mounted volume.
+          # This exercises the whole chain the browser uses, and leaves a
+          # "ci.smoke" deploy marker in the day's log file.
+          payload='{"sessionId":"ci-smoke","events":[{"level":"info","event":"ci.smoke","message":"ci smoke test"}]}'
+          if ! logs_reply="$(docker exec "$cid" wget -q -O - --header='Content-Type: application/json' --post-data="$payload" http://127.0.0.1:80/api/logs)"; then
+            echo "POST /api/logs did not return a successful response" >&2; exit 1
+          fi
+          echo "$logs_reply" | grep -q '"accepted":1' || { echo "log sink did not accept the event: $logs_reply" >&2; exit 1; }
+
           echo "smoke test passed"
         '''
       }

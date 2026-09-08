@@ -11,21 +11,17 @@ export const APPLICATION_STATUSES = [
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 
 /**
- * Status state machine — each status is an action/outcome.
+ * Statuses reachable from each status, used to populate the inline editor.
  *
- * Categories:
+ * Every status can reach every other one: real job searches go backwards
+ * (a "rejected" role reopens, a "ghosted" recruiter replies) and correcting a
+ * mistyped status must always be possible. The value of this map is the
+ * ordering and the exclusion of the current status, not restriction.
+ *
+ * Display categories are defined by STATUS_CATEGORY below:
  *   Pre-Interview : bookmarked, applied
  *   Active        : interviewing
  *   Complete      : offered, rejected, withdrawn, ghosted
- *
- * Valid transitions:
- *   bookmarked   → applied, withdrawn
- *   applied      → interviewing, rejected, ghosted, withdrawn
- *   interviewing → offered, rejected, withdrawn
- *   offered      → (terminal)
- *   rejected     → (terminal)
- *   withdrawn    → (terminal)
- *   ghosted      → (terminal)
  */
 export const STATUS_TRANSITIONS: Record<ApplicationStatus, readonly ApplicationStatus[]> = {
   bookmarked:   ["applied", "interviewing", "offered", "rejected", "withdrawn", "ghosted"],

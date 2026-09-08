@@ -1,10 +1,27 @@
 import type { Application } from "../../types/application";
-import type { StorageConfig, StorageService, ValidationResult } from "../../types/storage";
+import type {
+  StorageConfig,
+  StorageService,
+  ValidationResult,
+} from "../../types/storage";
 import {
   HEADER_ROW,
   applicationToRow,
   rowToApplication,
 } from "../../utils/sheet-mapper";
+import { describeGoogleError } from "../../utils/google-error";
+import { createLogger } from "../../utils/logger";
+
+const log = createLogger("sheets");
+
+/** Columns A..R, matching HEADER_ROW. */
+const LAST_COLUMN = "R";
+
+interface SheetProperties {
+  sheetId?: number;
+  title?: string;
+  gridProperties?: { rowCount?: number; columnCount?: number };
+}
 
 export class GoogleSheetsService implements StorageService {
   private spreadsheetId = "";
@@ -21,41 +38,21 @@ export class GoogleSheetsService implements StorageService {
 
   async validateStructure(): Promise<ValidationResult> {
     try {
-      const res = await window.gapi.client.sheets.spreadsheets.get({
-        spreadsheetId: this.spreadsheetId,
-      });
-      const sheets = res.result.sheets ?? [];
-      const appSheet = sheets.find(
-        (s) => s.properties?.title === this.sheetName,
-      );
+      const sheet = await this.findSheet((props) => props.title === this.sheetName);
+      if (!sheet) return { valid: true, needsSheetCreation: true };
 
-      if (!appSheet) {
-        return { valid: true, needsSheetCreation: true };
-      }
-
-      // Sheet exists — if it has data, verify the header row
-      const headerRes = await window.gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A1:A1`,
-      });
-      const firstCell = headerRes.result.values?.[0]?.[0];
-
+      // The sheet exists — if it holds data, make sure it is one of ours
+      const firstCell = (await this.readRange(`A1:A1`))[0]?.[0];
       if (firstCell && firstCell !== HEADER_ROW[0]) {
         return {
           valid: false,
           error: `The "${this.sheetName}" sheet doesn't look like a PWS Applications sheet — expected column A to be "${HEADER_ROW[0]}", found "${firstCell}". Please select the correct spreadsheet.`,
         };
       }
-
       return { valid: true };
     } catch (err) {
-      return {
-        valid: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : "Could not access the spreadsheet.",
-      };
+      log.error("Spreadsheet validation failed:", err);
+      return { valid: false, error: describeGoogleError(err) };
     }
   }
 
@@ -70,100 +67,95 @@ export class GoogleSheetsService implements StorageService {
 
   async getAll(): Promise<Application[]> {
     await this.ensureHeaderRow();
-    const response =
-      await window.gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A:R`,
-      });
-    const rows = response.result.values ?? [];
+    const rows = await this.readRange(`A:${LAST_COLUMN}`);
     if (rows.length <= 1) return [];
     return rows.slice(1).map(rowToApplication);
   }
 
   async writeAll(applications: Application[]): Promise<void> {
-    const emptyHistoryIds = applications
-      .filter((a) => (a.history ?? []).length === 0)
-      .map((a) => a.id);
-    if (emptyHistoryIds.length > 0) {
-      console.warn("[writeAll] Apps with empty history before write:", emptyHistoryIds);
-    } else {
-      console.debug("[writeAll] All", applications.length, "apps have history — writing");
-    }
-
-    const dataRows = applications.map(applicationToRow);
-    const allRows = [HEADER_ROW, ...dataRows];
+    const allRows = [HEADER_ROW, ...applications.map(applicationToRow)];
     const endRow = allRows.length;
 
-    await window.gapi.client.sheets.spreadsheets.values.update({
+    // History lives as JSON in column R; a past bug blanked it on write, so
+    // flag anything going out empty before it overwrites good remote data.
+    const missingHistory = applications
+      .filter((app) => (app.history ?? []).length === 0)
+      .map((app) => app.id);
+    if (missingHistory.length > 0) {
+      log.warn("Writing applications with no history:", missingHistory);
+    }
+
+    // RAW keeps Sheets from reinterpreting the JSON history column
+    await this.writeRange(`A1:${LAST_COLUMN}${endRow}`, allRows);
+    log.debug("Wrote", applications.length, "applications to the spreadsheet");
+
+    // Drop rows left over from a previously longer data set
+    const sheet = await this.findSheet((props) => props.title === this.sheetName);
+    const sheetId = sheet?.sheetId ?? 0;
+    const totalRows = sheet?.gridProperties?.rowCount ?? 0;
+    if (totalRows <= endRow) return;
+
+    await window.gapi.client.sheets.spreadsheets.batchUpdate({
       spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!A1:R${endRow}`,
-      valueInputOption: "RAW",
-      resource: { values: allRows },
-    });
-
-    // Clear any leftover rows below the current data
-    const sheetId = await this.getSheetId();
-    const response =
-      await window.gapi.client.sheets.spreadsheets.get({
-        spreadsheetId: this.spreadsheetId,
-      });
-    const sheet = response.result.sheets?.find(
-      (s) => s.properties?.sheetId === sheetId,
-    );
-    const totalRows = sheet?.properties?.gridProperties?.rowCount ?? 1000;
-
-    if (totalRows > endRow) {
-      await window.gapi.client.sheets.spreadsheets.batchUpdate({
-        spreadsheetId: this.spreadsheetId,
-        resource: {
-          requests: [
-            {
-              deleteDimension: {
-                range: {
-                  sheetId,
-                  dimension: "ROWS",
-                  startIndex: endRow,
-                  endIndex: totalRows,
-                },
+      resource: {
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId,
+                dimension: "ROWS",
+                startIndex: endRow,
+                endIndex: totalRows,
               },
             },
-          ],
-        },
-      });
-    }
+          },
+        ],
+      },
+    });
   }
 
-  private async getSheetId(): Promise<number> {
-    const response =
-      await window.gapi.client.sheets.spreadsheets.get({
-        spreadsheetId: this.spreadsheetId,
-      });
-    const sheet = response.result.sheets?.find(
-      (s) => s.properties?.title === this.sheetName,
+  /** Look up a sheet's properties within the spreadsheet. */
+  private async findSheet(
+    predicate: (props: SheetProperties) => boolean,
+  ): Promise<SheetProperties | null> {
+    const response = await window.gapi.client.sheets.spreadsheets.get({
+      spreadsheetId: this.spreadsheetId,
+    });
+    const match = (response.result.sheets ?? []).find((sheet) =>
+      sheet.properties ? predicate(sheet.properties) : false,
     );
-    return sheet?.properties?.sheetId ?? 0;
+    return match?.properties ?? null;
   }
 
+  private async readRange(range: string): Promise<string[][]> {
+    const response = await window.gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId: this.spreadsheetId,
+      range: `${this.sheetName}!${range}`,
+    });
+    return response.result.values ?? [];
+  }
+
+  private async writeRange(range: string, values: string[][]): Promise<void> {
+    await window.gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId: this.spreadsheetId,
+      range: `${this.sheetName}!${range}`,
+      valueInputOption: "RAW",
+      resource: { values },
+    });
+  }
+
+  /**
+   * Write the header if it is missing, wrong, or shorter than expected — the
+   * last case covers sheets created before the History column existed.
+   */
   private async ensureHeaderRow(): Promise<void> {
-    const response =
-      await window.gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A1:R1`,
-      });
-    const firstRow = response.result.values?.[0];
-    // Write header if: missing entirely, wrong first cell, or fewer columns than expected
-    // (the last case handles sheets created before the History column was added)
+    const firstRow = (await this.readRange(`A1:${LAST_COLUMN}1`))[0];
     const needsUpdate =
       !firstRow ||
       firstRow[0] !== HEADER_ROW[0] ||
       firstRow.length < HEADER_ROW.length;
     if (needsUpdate) {
-      await window.gapi.client.sheets.spreadsheets.values.update({
-        spreadsheetId: this.spreadsheetId,
-        range: `${this.sheetName}!A1:R1`,
-        valueInputOption: "RAW",
-        resource: { values: [HEADER_ROW] },
-      });
+      await this.writeRange(`A1:${LAST_COLUMN}1`, [HEADER_ROW]);
     }
   }
 }

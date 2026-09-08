@@ -1,70 +1,64 @@
-import ReactECharts from "echarts-for-react";
 import type { Application, ApplicationStatus } from "../../types/application";
+import { STATUS_HEX, FALLBACK_COLOR } from "../../config/theme";
+import { ChartFrame, ChartPlaceholder, type ChartProps } from "./chart-frame";
 
-interface ApplicationPipelineSankeyProps {
+interface ApplicationPipelineSankeyProps extends ChartProps {
   applications: Application[];
-  title: string;
+  /** Enables node dragging and adjacency highlighting (analytics page). */
   interactive?: boolean;
 }
 
-const NODE_COLORS: Record<string, string> = {
-  "All Applications": "#6366f1",
-  "Bookmarked":        "#9ca3af",
-  "Applied":           "#818cf8",
-  "Interviewing":      "#fbbf24",
-  "Awaiting Response": "#a5b4fc",
-  "In Interviews":     "#fcd34d",
-  "Offered":           "#34d399",
-  "Rejected":          "#f87171",
-  "Ghosted":           "#a78bfa",
-  "Withdrawn":         "#fb923c",
-};
-
-const N = {
-  all:      "All Applications",
-  bm:       "Bookmarked",
-  ap:       "Applied",
-  iv:       "Interviewing",
-  ar:       "Awaiting Response",
-  ii:       "In Interviews",
-  of:       "Offered",
-  re:       "Rejected",
-  gh:       "Ghosted",
-  wd:       "Withdrawn",
+/** Sankey node names, with the colour each one draws from. */
+const NODES = {
+  all: { name: "All Applications", color: "#6366f1" },
+  bookmarked: { name: "Bookmarked", color: STATUS_HEX.bookmarked },
+  applied: { name: "Applied", color: STATUS_HEX.applied },
+  interviewing: { name: "Interviewing", color: STATUS_HEX.interviewing },
+  awaiting: { name: "Awaiting Response", color: "#a5b4fc" },
+  inInterviews: { name: "In Interviews", color: "#fcd34d" },
+  offered: { name: "Offered", color: STATUS_HEX.offered },
+  rejected: { name: "Rejected", color: STATUS_HEX.rejected },
+  ghosted: { name: "Ghosted", color: STATUS_HEX.ghosted },
+  withdrawn: { name: "Withdrawn", color: STATUS_HEX.withdrawn },
 } as const;
 
-function buildOption(apps: Application[], interactive: boolean) {
+function countByStatus(
+  applications: Application[],
+): Record<ApplicationStatus, number> {
   const counts: Record<ApplicationStatus, number> = {
     bookmarked: 0, applied: 0, interviewing: 0,
     offered: 0, rejected: 0, withdrawn: 0, ghosted: 0,
   };
-  for (const app of apps) counts[app.status]++;
+  for (const app of applications) counts[app.status]++;
+  return counts;
+}
 
-  const appliedPlus      = apps.length - counts.bookmarked;
+function buildOption(applications: Application[], interactive: boolean) {
+  const counts = countByStatus(applications);
+  const appliedPlus = applications.length - counts.bookmarked;
   const interviewingPlus = counts.interviewing + counts.offered;
 
-  const rawLinks: [string, string, number][] = [
-    [N.all, N.bm, counts.bookmarked],
-    [N.all, N.ap, appliedPlus],
-    [N.ap,  N.iv, interviewingPlus],
-    [N.ap,  N.ar, counts.applied],
-    [N.ap,  N.re, counts.rejected],
-    [N.ap,  N.gh, counts.ghosted],
-    [N.ap,  N.wd, counts.withdrawn],
-    [N.iv,  N.of, counts.offered],
-    [N.iv,  N.ii, counts.interviewing],
-  ];
-
-  const links = rawLinks
-    .filter(([,, v]) => v > 0)
-    .map(([source, target, value]) => ({ source, target, value }));
+  const links = (
+    [
+      [NODES.all, NODES.bookmarked, counts.bookmarked],
+      [NODES.all, NODES.applied, appliedPlus],
+      [NODES.applied, NODES.interviewing, interviewingPlus],
+      [NODES.applied, NODES.awaiting, counts.applied],
+      [NODES.applied, NODES.rejected, counts.rejected],
+      [NODES.applied, NODES.ghosted, counts.ghosted],
+      [NODES.applied, NODES.withdrawn, counts.withdrawn],
+      [NODES.interviewing, NODES.offered, counts.offered],
+      [NODES.interviewing, NODES.inInterviews, counts.interviewing],
+    ] as const
+  )
+    .filter(([, , value]) => value > 0)
+    .map(([source, target, value]) => ({
+      source: source.name,
+      target: target.name,
+      value,
+    }));
 
   if (links.length === 0) return null;
-
-  const data = Object.values(N).map((name) => ({
-    name,
-    itemStyle: { color: NODE_COLORS[name] ?? "#94a3b8" },
-  }));
 
   return {
     tooltip: { trigger: "item" },
@@ -73,28 +67,17 @@ function buildOption(apps: Application[], interactive: boolean) {
         type: "sankey",
         layout: "none",
         draggable: interactive,
-        emphasis: interactive
-          ? { focus: "adjacency" }
-          : { disabled: true },
-        data,
+        emphasis: interactive ? { focus: "adjacency" } : { disabled: true },
+        data: Object.values(NODES).map((node) => ({
+          name: node.name,
+          // borderWidth 0 replaces the per-depth `levels` overrides
+          itemStyle: { color: node.color ?? FALLBACK_COLOR, borderWidth: 0 },
+        })),
         links,
         nodeWidth: 10,
         nodeGap: 24,
-        lineStyle: {
-          color: "source",
-          opacity: 0.35,
-        },
-        label: {
-          position: "right",
-          fontSize: 12,
-          color: "#374151",
-        },
-        levels: [
-          { depth: 0, itemStyle: { borderWidth: 0 } },
-          { depth: 1, itemStyle: { borderWidth: 0 } },
-          { depth: 2, itemStyle: { borderWidth: 0 } },
-          { depth: 3, itemStyle: { borderWidth: 0 } },
-        ],
+        lineStyle: { color: "source", opacity: 0.35 },
+        label: { position: "right", fontSize: 12, color: "#374151" },
       },
     ],
   };
@@ -103,32 +86,30 @@ function buildOption(apps: Application[], interactive: boolean) {
 export function ApplicationPipelineSankey({
   applications,
   title,
+  height = 420,
   interactive = false,
 }: ApplicationPipelineSankeyProps) {
   const option = buildOption(applications, interactive);
 
   if (!option) {
     return (
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
-        <p className="text-sm text-gray-400">Not enough data to show pipeline.</p>
-      </div>
+      <ChartPlaceholder
+        title={title}
+        message="Not enough data to show pipeline."
+      />
     );
   }
 
   return (
-    <div>
-      <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
-      {interactive && (
-        <p className="mb-3 text-xs text-gray-400">
-          Hover to highlight flows · drag nodes vertically to reposition
-        </p>
-      )}
-      <ReactECharts
-        option={option}
-        style={{ height: 420 }}
-        notMerge
-      />
-    </div>
+    <ChartFrame
+      option={option}
+      title={title}
+      height={height}
+      caption={
+        interactive
+          ? "Hover to highlight flows · drag nodes vertically to reposition"
+          : undefined
+      }
+    />
   );
 }

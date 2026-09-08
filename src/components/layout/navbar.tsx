@@ -3,7 +3,7 @@ import { useAuth } from "../../hooks/use-auth";
 import { ROUTES } from "../../config/routes";
 import { UserMenu } from "../auth/user-menu";
 import { LoginButton } from "../auth/login-button";
-import { SyncIndicator } from "../shared/sync-indicator";
+import { SyncIndicator } from "../sync/sync-indicator";
 
 const NAV_LINKS = [
   { to: ROUTES.HOME, label: "Dashboard" },

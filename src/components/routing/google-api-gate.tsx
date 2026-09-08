@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useGoogleApi } from "../../hooks/use-google-api";
-import { LoadingSpinner } from "../shared/loading-spinner";
+import { LoadingSpinner } from "../ui/loading-spinner";
 
 export function GoogleApiGate({ children }: { children: ReactNode }) {
   const { isReady, error, retry } = useGoogleApi();

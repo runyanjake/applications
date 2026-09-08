@@ -1,54 +1,45 @@
-import { useState, useEffect } from "react";
-import { getTimezone, saveTimezone, TIMEZONE_OPTIONS } from "../../utils/timezone-store";
+import { useState } from "react";
+import {
+  getTimezone,
+  saveTimezone,
+  TIMEZONE_OPTIONS,
+} from "../../utils/timezone-store";
+import { Button } from "../ui/button";
+import { TitledCard } from "../ui/card";
+import { Field, inputClass } from "../ui/field";
+import { useSavedFlash } from "../../hooks/use-saved-flash";
 
 export function TimezoneCard() {
-  const [tz, setTz] = useState(getTimezone);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setTz(getTimezone());
-  }, []);
+  const [timezone, setTimezone] = useState(getTimezone);
+  const { saved, flash } = useSavedFlash();
 
   const handleSave = () => {
-    saveTimezone(tz);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    saveTimezone(timezone);
+    flash();
   };
 
-  const inputCls =
-    "w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
-
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">Timezone</h2>
-      <p className="mb-4 text-sm text-gray-500">
-        Dates and times are stored in UTC and displayed in your selected timezone.
-      </p>
+    <TitledCard
+      title="Timezone"
+      description="Dates and times are stored in UTC and displayed in your selected timezone."
+    >
       <div className="space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Display timezone
-          </label>
+        <Field label="Display timezone">
           <select
-            value={tz}
-            onChange={(e) => setTz(e.target.value)}
-            className={inputCls}
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className={inputClass}
           >
-            {TIMEZONE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            {TIMEZONE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
-        </div>
+        </Field>
         {saved && <p className="text-sm text-green-600">Saved!</p>}
-        <button
-          onClick={handleSave}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Save
-        </button>
+        <Button onClick={handleSave}>Save</Button>
       </div>
-    </div>
+    </TitledCard>
   );
 }

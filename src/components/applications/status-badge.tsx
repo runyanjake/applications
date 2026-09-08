@@ -1,16 +1,8 @@
 import type { ApplicationStatus } from "../../types/application";
-import { formatStatus, statusColor } from "../../utils/formatters";
+import { STATUS_BADGE } from "../../config/theme";
+import { formatStatus } from "../../utils/formatters";
+import { Badge } from "../ui/badge";
 
-interface StatusBadgeProps {
-  status: ApplicationStatus;
-}
-
-export function StatusBadge({ status }: StatusBadgeProps) {
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(status)}`}
-    >
-      {formatStatus(status)}
-    </span>
-  );
+export function StatusBadge({ status }: { status: ApplicationStatus }) {
+  return <Badge tone={STATUS_BADGE[status]}>{formatStatus(status)}</Badge>;
 }

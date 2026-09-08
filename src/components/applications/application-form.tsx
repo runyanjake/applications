@@ -2,17 +2,17 @@ import { useState } from "react";
 import {
   CURRENCIES,
   INTEREST_LEVELS,
-  PRE_INTERVIEW_STATUSES,
-  ACTIVE_STATUSES,
-  COMPLETE_STATUSES,
   type ApplicationFormData,
 } from "../../types/application";
-import { formatStatus } from "../../utils/formatters";
+import { formatInterest } from "../../utils/formatters";
 import {
   validateApplicationForm,
   hasErrors,
   type ValidationErrors,
 } from "../../utils/validators";
+import { Button } from "../ui/button";
+import { Field, inputClass } from "../ui/field";
+import { StatusOptionGroups } from "./status-options";
 import { LLMFillButton } from "./llm-fill-button";
 
 interface ApplicationFormProps {
@@ -22,27 +22,38 @@ interface ApplicationFormProps {
   onCancel?: () => void;
 }
 
-const EMPTY_FORM: ApplicationFormData = {
-  position: "",
-  companyName: "",
-  companyWebsite: "",
-  city: "",
-  state: "",
-  country: "",
-  remote: false,
-  salaryMin: null,
-  salaryMax: null,
-  currency: "USD",
-  jobPostingUrl: "",
-  interest: "medium",
-  status: "bookmarked",
-  notes: "",
-  dateApplied: new Date().toISOString().slice(0, 10),
-};
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
-export function ApplicationForm({ onSubmit, initial, submitLabel, onCancel }: ApplicationFormProps) {
+function emptyForm(): ApplicationFormData {
+  return {
+    position: "",
+    companyName: "",
+    companyWebsite: "",
+    city: "",
+    state: "",
+    country: "",
+    remote: false,
+    salaryMin: null,
+    salaryMax: null,
+    currency: "USD",
+    jobPostingUrl: "",
+    interest: "medium",
+    status: "bookmarked",
+    notes: "",
+    dateApplied: today(),
+  };
+}
+
+export function ApplicationForm({
+  onSubmit,
+  initial,
+  submitLabel,
+  onCancel,
+}: ApplicationFormProps) {
   const [form, setForm] = useState<ApplicationFormData>({
-    ...EMPTY_FORM,
+    ...emptyForm(),
     ...initial,
   });
   const [errors, setErrors] = useState<ValidationErrors>({});
@@ -55,9 +66,9 @@ export function ApplicationForm({ onSubmit, initial, submitLabel, onCancel }: Ap
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errs = validateApplicationForm(form);
-    setErrors(errs);
-    if (hasErrors(errs)) return;
+    const validationErrors = validateApplicationForm(form);
+    setErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
 
     setSubmitting(true);
     try {
@@ -65,7 +76,7 @@ export function ApplicationForm({ onSubmit, initial, submitLabel, onCancel }: Ap
       if (onCancel) {
         onCancel();
       } else {
-        setForm({ ...EMPTY_FORM, dateApplied: new Date().toISOString().slice(0, 10) });
+        setForm(emptyForm());
         setErrors({});
       }
     } finally {
@@ -73,114 +84,69 @@ export function ApplicationForm({ onSubmit, initial, submitLabel, onCancel }: Ap
     }
   };
 
-  const handleLLMFill = (data: Partial<ApplicationFormData>) => {
-    setForm((prev) => ({ ...prev, ...data }));
-  };
+  /** Text-ish input bound to a string field. */
+  const textField = (
+    key: Extract<
+      keyof ApplicationFormData,
+      | "position"
+      | "companyName"
+      | "companyWebsite"
+      | "jobPostingUrl"
+      | "city"
+      | "state"
+      | "country"
+    >,
+    label: string,
+    { type = "text", placeholder }: { type?: string; placeholder?: string } = {},
+  ) => (
+    <Field label={label} error={errors[key]}>
+      <input
+        type={type}
+        value={form[key]}
+        placeholder={placeholder}
+        onChange={(e) => set(key, e.target.value)}
+        className={inputClass}
+      />
+    </Field>
+  );
 
-  const inputCls =
-    "w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
-  const errorCls = "mt-1 text-xs text-red-500";
+  const salaryField = (
+    key: "salaryMin" | "salaryMax",
+    label: string,
+  ) => (
+    <Field label={label} error={errors[key]}>
+      <input
+        type="number"
+        value={form[key] ?? ""}
+        onChange={(e) => set(key, e.target.value ? Number(e.target.value) : null)}
+        className={inputClass}
+      />
+    </Field>
+  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <LLMFillButton onFill={handleLLMFill} />
+      <LLMFillButton
+        onFill={(data) => setForm((prev) => ({ ...prev, ...data }))}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Position *
-          </label>
-          <input
-            type="text"
-            value={form.position}
-            onChange={(e) => set("position", e.target.value)}
-            className={inputCls}
-          />
-          {errors.position && <p className={errorCls}>{errors.position}</p>}
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Company Name *
-          </label>
-          <input
-            type="text"
-            value={form.companyName}
-            onChange={(e) => set("companyName", e.target.value)}
-            className={inputCls}
-          />
-          {errors.companyName && (
-            <p className={errorCls}>{errors.companyName}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Company Website
-          </label>
-          <input
-            type="url"
-            value={form.companyWebsite}
-            onChange={(e) => set("companyWebsite", e.target.value)}
-            placeholder="https://..."
-            className={inputCls}
-          />
-          {errors.companyWebsite && (
-            <p className={errorCls}>{errors.companyWebsite}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Job Posting URL
-          </label>
-          <input
-            type="url"
-            value={form.jobPostingUrl}
-            onChange={(e) => set("jobPostingUrl", e.target.value)}
-            placeholder="https://..."
-            className={inputCls}
-          />
-          {errors.jobPostingUrl && (
-            <p className={errorCls}>{errors.jobPostingUrl}</p>
-          )}
-        </div>
+        {textField("position", "Position *")}
+        {textField("companyName", "Company Name *")}
+        {textField("companyWebsite", "Company Website", {
+          type: "url",
+          placeholder: "https://...",
+        })}
+        {textField("jobPostingUrl", "Job Posting URL", {
+          type: "url",
+          placeholder: "https://...",
+        })}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            City
-          </label>
-          <input
-            type="text"
-            value={form.city}
-            onChange={(e) => set("city", e.target.value)}
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            State
-          </label>
-          <input
-            type="text"
-            value={form.state}
-            onChange={(e) => set("state", e.target.value)}
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Country
-          </label>
-          <input
-            type="text"
-            value={form.country}
-            onChange={(e) => set("country", e.target.value)}
-            className={inputCls}
-          />
-        </div>
+        {textField("city", "City")}
+        {textField("state", "State")}
+        {textField("country", "Country")}
         <div className="flex items-end">
           <label className="flex items-center gap-2 pb-2">
             <input
@@ -195,151 +161,87 @@ export function ApplicationForm({ onSubmit, initial, submitLabel, onCancel }: Ap
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Salary Min
-          </label>
-          <input
-            type="number"
-            value={form.salaryMin ?? ""}
-            onChange={(e) =>
-              set("salaryMin", e.target.value ? Number(e.target.value) : null)
-            }
-            className={inputCls}
-          />
-          {errors.salaryMin && (
-            <p className={errorCls}>{errors.salaryMin}</p>
-          )}
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Salary Max
-          </label>
-          <input
-            type="number"
-            value={form.salaryMax ?? ""}
-            onChange={(e) =>
-              set("salaryMax", e.target.value ? Number(e.target.value) : null)
-            }
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Currency
-          </label>
+        {salaryField("salaryMin", "Salary Min")}
+        {salaryField("salaryMax", "Salary Max")}
+        <Field label="Currency">
           <select
             value={form.currency}
             onChange={(e) =>
               set("currency", e.target.value as ApplicationFormData["currency"])
             }
-            className={inputCls}
+            className={inputClass}
           >
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {CURRENCIES.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
               </option>
             ))}
           </select>
-        </div>
+        </Field>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Status *
-          </label>
+        <Field label="Status *" error={errors.status}>
           <select
             value={form.status}
             onChange={(e) =>
-              set(
-                "status",
-                e.target.value as ApplicationFormData["status"],
-              )
+              set("status", e.target.value as ApplicationFormData["status"])
             }
-            className={inputCls}
+            className={inputClass}
           >
-            <optgroup label="Pre-Interview">
-              {PRE_INTERVIEW_STATUSES.map((s) => (
-                <option key={s} value={s}>{formatStatus(s)}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Active">
-              {ACTIVE_STATUSES.map((s) => (
-                <option key={s} value={s}>{formatStatus(s)}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Complete">
-              {COMPLETE_STATUSES.map((s) => (
-                <option key={s} value={s}>{formatStatus(s)}</option>
-              ))}
-            </optgroup>
+            <StatusOptionGroups />
           </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Interest *
-          </label>
+        </Field>
+
+        <Field label="Interest *" error={errors.interest}>
           <select
             value={form.interest}
             onChange={(e) =>
-              set(
-                "interest",
-                e.target.value as ApplicationFormData["interest"],
-              )
+              set("interest", e.target.value as ApplicationFormData["interest"])
             }
-            className={inputCls}
+            className={inputClass}
           >
-            {INTEREST_LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l.charAt(0).toUpperCase() + l.slice(1)}
+            {INTEREST_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {formatInterest(level)}
               </option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Date Applied
-          </label>
+        </Field>
+
+        <Field label="Date Applied">
           <input
             type="date"
             value={form.dateApplied}
             onChange={(e) => set("dateApplied", e.target.value)}
-            className={inputCls}
+            className={inputClass}
           />
-        </div>
+        </Field>
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-700">
-          Notes
-        </label>
+      <Field label="Notes">
         <textarea
           rows={3}
           value={form.notes}
           onChange={(e) => set("notes", e.target.value)}
-          className={inputCls}
+          className={inputClass}
         />
-      </div>
+      </Field>
 
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="lg"
             onClick={onCancel}
             disabled={submitting}
-            className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
-          </button>
+          </Button>
         )}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
+        <Button type="submit" size="lg" disabled={submitting}>
           {submitting ? "Saving..." : (submitLabel ?? "Add Application")}
-        </button>
+        </Button>
       </div>
     </form>
   );

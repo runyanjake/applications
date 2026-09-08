@@ -15,5 +15,6 @@ History is stored as JSON in sheet column R. A prior migration bug produced malf
 
 **`src/providers/application-provider.tsx`:**
 - Uses `isLoadingRef` to block sync from running during the initial load phase, preventing a race where an empty-history state writes over freshly loaded data
+- `writeAll` logs a warning naming any application whose history is empty at write time — leave that instrumentation in place
 
 **How to apply:** When touching sync or sheet write logic, verify these invariants hold. Never change `valueInputOption` back to `USER_ENTERED` for the history column.

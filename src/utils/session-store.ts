@@ -20,14 +20,3 @@ export function sessionSet<T>(key: string, value: T): void {
 export function sessionRemove(key: string): void {
   sessionStorage.removeItem(PREFIX + key);
 }
-
-export function sessionClear(): void {
-  const keysToRemove: string[] = [];
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const key = sessionStorage.key(i);
-    if (key?.startsWith(PREFIX)) {
-      keysToRemove.push(key);
-    }
-  }
-  keysToRemove.forEach((k) => sessionStorage.removeItem(k));
-}

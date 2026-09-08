@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import { StorageContext } from "../providers/storage-provider";
+import { StorageContext } from "../providers/storage-context";
 
 export function useStorage() {
   const ctx = useContext(StorageContext);

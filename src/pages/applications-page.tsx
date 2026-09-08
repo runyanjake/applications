@@ -1,29 +1,21 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useApplications } from "../hooks/use-applications";
-import { useStorage } from "../hooks/use-storage";
 import type { ApplicationFilters } from "../types/application";
 import { ROUTES } from "../config/routes";
-import { PageHeader } from "../components/shared/page-header";
+import { PageHeader } from "../components/ui/page-header";
+import { EmptyState } from "../components/ui/empty-state";
+import { RequireSpreadsheet } from "../components/routing/require-spreadsheet";
 import { ApplicationFiltersBar } from "../components/applications/application-filters";
 import { ApplicationTable } from "../components/applications/application-table";
-import { SpreadsheetSetup } from "../components/dashboard/spreadsheet-setup";
-import { EmptyState } from "../components/shared/empty-state";
-import { LoadingSpinner } from "../components/shared/loading-spinner";
 
 export function ApplicationsPage() {
-  const { isConfigured } = useStorage();
-  const { applications, isLoading, getFilteredApplications } =
-    useApplications();
+  const { applications, getFilteredApplications } = useApplications();
   const [filters, setFilters] = useState<ApplicationFilters>({});
-
-  if (!isConfigured) return <SpreadsheetSetup />;
-  if (isLoading) return <LoadingSpinner className="py-32" />;
-
   const filtered = getFilteredApplications(filters);
 
   return (
-    <div>
+    <RequireSpreadsheet>
       <PageHeader
         title="Applications"
         description={`${filtered.length} of ${applications.length} applications`}
@@ -53,6 +45,6 @@ export function ApplicationsPage() {
       ) : (
         <ApplicationTable applications={filtered} />
       )}
-    </div>
+    </RequireSpreadsheet>
   );
 }

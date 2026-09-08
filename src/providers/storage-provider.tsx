@@ -1,5 +1,4 @@
 import {
-  createContext,
   useCallback,
   useEffect,
   useMemo,
@@ -12,43 +11,33 @@ import { createStorageService } from "../services/storage/storage-service";
 import { openSpreadsheetPicker } from "../services/picker/google-picker-service";
 import { useAuth } from "../hooks/use-auth";
 import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
+import { describeGoogleError } from "../utils/google-error";
+import { createLogger } from "../utils/logger";
+import {
+  StorageContext,
+  type SpreadsheetInfo,
+} from "./storage-context";
 
-// Session keys owned by ApplicationProvider — cleared whenever the spreadsheet changes or disconnects
+const log = createLogger("storage");
+
+/** Session keys owned by ApplicationProvider — cleared when the sheet changes. */
 const APP_SESSION_KEYS = ["applications", "sync-state"] as const;
 
-interface SpreadsheetInfo {
-  id: string;
-  name: string;
-}
-
-interface StorageContextValue {
-  isConfigured: boolean;
-  spreadsheet: SpreadsheetInfo | null;
-  storageService: StorageService;
-  validationError: string | null;
-  pendingSheetCreation: SpreadsheetInfo | null;
-  pickSpreadsheet: () => Promise<void>;
-  clearSpreadsheet: () => void;
-  confirmSheetCreation: () => Promise<void>;
-  cancelSheetCreation: () => void;
-}
-
-export const StorageContext = createContext<StorageContextValue | null>(null);
-
 const SESSION_KEY = "storage:spreadsheet";
+const SHEET_NAME = "Applications";
 
 /** Configure the service and persist the spreadsheet info to session. */
 function commitSpreadsheet(
   service: StorageService,
   info: SpreadsheetInfo,
 ): void {
-  service.configure({ spreadsheetId: info.id, sheetName: "Applications" });
+  service.configure({ spreadsheetId: info.id, sheetName: SHEET_NAME });
   sessionSet(SESSION_KEY, info);
 }
 
 /** Reset the service and clear all app-related session data. */
 function resetService(service: StorageService): void {
-  service.configure({ spreadsheetId: "", sheetName: "Applications" });
+  service.configure({ spreadsheetId: "", sheetName: SHEET_NAME });
   sessionRemove(SESSION_KEY);
   APP_SESSION_KEYS.forEach(sessionRemove);
 }
@@ -57,115 +46,122 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const { state: authState } = useAuth();
   const service = useRef(createStorageService());
 
-  const [spreadsheet, setSpreadsheet] = useState<SpreadsheetInfo | null>(
-    () => sessionGet<SpreadsheetInfo>(SESSION_KEY),
+  const [spreadsheet, setSpreadsheet] = useState<SpreadsheetInfo | null>(() =>
+    sessionGet<SpreadsheetInfo>(SESSION_KEY),
   );
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [pendingSheetCreation, setPendingSheetCreation] = useState<SpreadsheetInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isPicking, setIsPicking] = useState(false);
+  const [pendingSheetCreation, setPendingSheetCreation] =
+    useState<SpreadsheetInfo | null>(null);
   const hasPrompted = useRef(false);
 
-  // Keep main service in sync with committed spreadsheet state
+  // Keep the service in sync with the committed spreadsheet state
   useEffect(() => {
     if (spreadsheet) {
       service.current.configure({
         spreadsheetId: spreadsheet.id,
-        sheetName: "Applications",
+        sheetName: SHEET_NAME,
       });
     }
   }, [spreadsheet]);
 
-  // Auto-open picker once on login when no spreadsheet is configured
+  /**
+   * The single spreadsheet-selection flow: open the picker, validate the
+   * choice against a throwaway service (so the live one is untouched until
+   * the choice is known-good), then commit.
+   */
+  const pickSpreadsheet = useCallback(async () => {
+    const accessToken = authState.tokens?.accessToken;
+    if (!accessToken) {
+      setError("You are signed out. Sign in again to choose a spreadsheet.");
+      return;
+    }
+
+    setIsPicking(true);
+    setError(null);
+    try {
+      const doc = await openSpreadsheetPicker(accessToken);
+      if (!doc) return; // cancelled
+
+      const probe = createStorageService();
+      probe.configure({ spreadsheetId: doc.id, sheetName: SHEET_NAME });
+      const result = await probe.validateStructure();
+
+      if (!result.valid) {
+        setError(result.error ?? "Invalid spreadsheet.");
+        return;
+      }
+      if (result.needsSheetCreation) {
+        setPendingSheetCreation({ id: doc.id, name: doc.name });
+        return;
+      }
+
+      const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
+      commitSpreadsheet(service.current, info);
+      setSpreadsheet(info);
+    } catch (err) {
+      // Without this the button appears to do nothing at all.
+      log.error("Spreadsheet selection failed:", err);
+      setError(describeGoogleError(err));
+    } finally {
+      setIsPicking(false);
+    }
+  }, [authState.tokens?.accessToken]);
+
+  // Open the picker once per session on login when nothing is configured yet
   useEffect(() => {
     if (
-      authState.isAuthenticated &&
-      authState.tokens &&
-      !spreadsheet &&
-      !hasPrompted.current
+      !authState.isAuthenticated ||
+      !authState.tokens ||
+      spreadsheet ||
+      hasPrompted.current
     ) {
-      hasPrompted.current = true;
-      openSpreadsheetPicker(authState.tokens.accessToken).then(async (doc) => {
-        if (!doc) {
-          hasPrompted.current = false;
-          return;
-        }
-        // Validate using a temp service so main service is untouched until committed
-        const temp = createStorageService();
-        temp.configure({ spreadsheetId: doc.id, sheetName: "Applications" });
-        const result = await temp.validateStructure();
-
-        if (!result.valid) {
-          setValidationError(result.error ?? "Invalid spreadsheet.");
-          return;
-        }
-        if (result.needsSheetCreation) {
-          setPendingSheetCreation({ id: doc.id, name: doc.name });
-          return;
-        }
-
-        const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
-        commitSpreadsheet(service.current, info);
-        setSpreadsheet(info);
-      });
-    }
-  }, [authState.isAuthenticated, authState.tokens, spreadsheet]);
-
-  const pickSpreadsheet = useCallback(async () => {
-    if (!authState.tokens) return;
-    const doc = await openSpreadsheetPicker(authState.tokens.accessToken);
-    if (!doc) return;
-
-    // Validate with a temporary service — main service is never touched until we commit
-    const temp = createStorageService();
-    temp.configure({ spreadsheetId: doc.id, sheetName: "Applications" });
-    const result = await temp.validateStructure();
-
-    if (!result.valid) {
-      setValidationError(result.error ?? "Invalid spreadsheet.");
       return;
     }
-
-    if (result.needsSheetCreation) {
-      setValidationError(null);
-      setPendingSheetCreation({ id: doc.id, name: doc.name });
-      return;
-    }
-
-    // Valid — commit and trigger reload in ApplicationProvider
-    setValidationError(null);
-    const info: SpreadsheetInfo = { id: doc.id, name: doc.name };
-    commitSpreadsheet(service.current, info);
-    setSpreadsheet(info);
-  }, [authState.tokens]);
+    hasPrompted.current = true;
+    void pickSpreadsheet();
+  }, [
+    authState.isAuthenticated,
+    authState.tokens,
+    spreadsheet,
+    pickSpreadsheet,
+  ]);
 
   const confirmSheetCreation = useCallback(async () => {
     if (!pendingSheetCreation) return;
-    // Now it is safe to configure the main service and create the sheet
+    // Only now is it safe to point the live service at this spreadsheet
     service.current.configure({
       spreadsheetId: pendingSheetCreation.id,
-      sheetName: "Applications",
+      sheetName: SHEET_NAME,
     });
-    await service.current.createApplicationsSheet();
-    setValidationError(null);
+    try {
+      await service.current.createApplicationsSheet();
+    } catch (err) {
+      log.error("Failed to create the Applications sheet:", err);
+      setError(describeGoogleError(err));
+      return;
+    }
+    setError(null);
     setPendingSheetCreation(null);
     sessionSet(SESSION_KEY, pendingSheetCreation);
     setSpreadsheet(pendingSheetCreation);
   }, [pendingSheetCreation]);
 
   const cancelSheetCreation = useCallback(() => {
-    // Main service was never reconfigured, so nothing to revert there.
-    // If there was no previous spreadsheet, clear any stale app session data.
-    if (!spreadsheet) {
-      resetService(service.current);
-    }
+    // The live service was never reconfigured, so there is nothing to revert.
+    // With no previous spreadsheet, drop any stale app session data.
+    if (!spreadsheet) resetService(service.current);
     setPendingSheetCreation(null);
-    setValidationError(null);
+    setError(null);
   }, [spreadsheet]);
 
   const clearSpreadsheet = useCallback(() => {
     resetService(service.current);
     setSpreadsheet(null);
-    setValidationError(null);
+    setError(null);
     setPendingSheetCreation(null);
+    // hasPrompted stays set: disconnecting should not immediately reopen the
+    // picker — the user re-selects from the setup screen when ready.
   }, []);
 
   const value = useMemo(
@@ -173,7 +169,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
       isConfigured: spreadsheet != null,
       spreadsheet,
       storageService: service.current,
-      validationError,
+      error,
+      isPicking,
       pendingSheetCreation,
       pickSpreadsheet,
       clearSpreadsheet,
@@ -182,7 +179,8 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     }),
     [
       spreadsheet,
-      validationError,
+      error,
+      isPicking,
       pendingSheetCreation,
       pickSpreadsheet,
       clearSpreadsheet,

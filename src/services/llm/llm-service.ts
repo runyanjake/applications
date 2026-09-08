@@ -3,6 +3,9 @@ import type { LLMConfig } from "../../types/llm";
 import { GeminiLLMService } from "./gemini-llm-service";
 import { OpenAILLMService } from "./openai-llm-service";
 import { AnthropicLLMService } from "./anthropic-llm-service";
+import { createLogger } from "../../utils/logger";
+
+const log = createLogger("llm");
 
 export interface LLMService {
   extractApplicationData(
@@ -58,27 +61,39 @@ export function parseExtractedJSON(
     }
   }
 
-  console.log("[LLM] Raw response:", text);
+  log.debug("Raw response:", text);
 
   const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
-  // Build a safe partial, only keeping known keys with correct types
+  // Keep only known keys that arrived with the expected type
   const result: Partial<ApplicationFormData> = {};
+  const copyIfType = <K extends keyof ApplicationFormData>(
+    key: K,
+    type: "string" | "number" | "boolean",
+  ) => {
+    if (typeof parsed[key] === type) {
+      result[key] = parsed[key] as ApplicationFormData[K];
+    }
+  };
 
-  if (typeof parsed.position === "string") result.position = parsed.position;
-  if (typeof parsed.companyName === "string") result.companyName = parsed.companyName;
-  if (typeof parsed.companyWebsite === "string") result.companyWebsite = parsed.companyWebsite;
-  if (typeof parsed.jobPostingUrl === "string") result.jobPostingUrl = parsed.jobPostingUrl;
-  if (typeof parsed.city === "string") result.city = parsed.city;
-  if (typeof parsed.state === "string") result.state = parsed.state;
-  if (typeof parsed.country === "string") result.country = parsed.country;
-  if (typeof parsed.remote === "boolean") result.remote = parsed.remote;
-  if (typeof parsed.salaryMin === "number") result.salaryMin = parsed.salaryMin;
-  if (typeof parsed.salaryMax === "number") result.salaryMax = parsed.salaryMax;
-  if (typeof parsed.currency === "string") result.currency = parsed.currency as ApplicationFormData["currency"];
-  if (typeof parsed.notes === "string") result.notes = parsed.notes;
+  for (const key of [
+    "position",
+    "companyName",
+    "companyWebsite",
+    "jobPostingUrl",
+    "city",
+    "state",
+    "country",
+    "currency",
+    "notes",
+  ] as const) {
+    copyIfType(key, "string");
+  }
+  copyIfType("remote", "boolean");
+  copyIfType("salaryMin", "number");
+  copyIfType("salaryMax", "number");
 
-  console.log("[LLM] Parsed result:", result);
+  log.debug("Parsed result:", result);
 
   return result;
 }

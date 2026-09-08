@@ -1,4 +1,8 @@
 node_modules
+**/node_modules
 dist
 .env
 .git
+logs
+# The log sink builds from ./server with its own context
+server

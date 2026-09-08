@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   LLM_PROVIDERS,
   PROVIDER_LABELS,
@@ -6,192 +6,177 @@ import {
   type LLMProvider,
   type LLMConfig,
 } from "../../types/llm";
-import { getLLMConfig, saveLLMConfig, clearLLMConfig } from "../../utils/llm-store";
+import {
+  getLLMConfig,
+  saveLLMConfig,
+  clearLLMConfig,
+} from "../../utils/llm-store";
+import { useSavedFlash } from "../../hooks/use-saved-flash";
+import { Alert } from "../ui/alert";
+import { Button } from "../ui/button";
+import { TitledCard } from "../ui/card";
+import { Field, inputClass } from "../ui/field";
+
+const CUSTOM_ENDPOINT_PLACEHOLDER = "http://localhost:1234/v1/chat/completions";
+
+/** Per-provider copy for the base URL field. */
+const BASE_URL_HELP: Partial<
+  Record<LLMProvider, { label: string; placeholder: string; hint: string }>
+> = {
+  anthropic: {
+    label: "Base URL",
+    placeholder: "https://your-cors-proxy.example.com",
+    hint: "Anthropic's API does not support browser requests (CORS). Provide a CORS proxy URL that forwards to api.anthropic.com.",
+  },
+  openai: {
+    label: "Base URL",
+    placeholder: "https://api.openai.com/v1",
+    hint: "Optional. Override to use an OpenAI-compatible endpoint.",
+  },
+  custom: {
+    label: "Chat Endpoint URL",
+    placeholder: CUSTOM_ENDPOINT_PLACEHOLDER,
+    hint: "Full URL to the chat completions endpoint on your server (e.g. LM Studio, Ollama, vLLM).",
+  },
+};
+
+function blankForm(provider: LLMProvider) {
+  return {
+    provider,
+    apiKey: "",
+    model: DEFAULT_MODELS[provider],
+    baseUrl: provider === "custom" ? CUSTOM_ENDPOINT_PLACEHOLDER : "",
+  };
+}
 
 export function LLMProviderCard() {
-  const [provider, setProvider] = useState<LLMProvider>("gemini");
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(DEFAULT_MODELS.gemini);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [configured, setConfigured] = useState(false);
-
-  useEffect(() => {
+  const [config, setConfig] = useState(() => {
     const existing = getLLMConfig();
-    if (existing) {
-      setProvider(existing.provider);
-      setApiKey(existing.apiKey);
-      setModel(existing.model);
-      setBaseUrl(existing.baseUrl ?? "");
-      setConfigured(true);
-    }
-  }, []);
+    return existing
+      ? { ...existing, baseUrl: existing.baseUrl ?? "" }
+      : blankForm("gemini");
+  });
+  const [configured, setConfigured] = useState(() => getLLMConfig() !== null);
+  const { saved, flash } = useSavedFlash();
 
-  const handleProviderChange = (p: LLMProvider) => {
-    setProvider(p);
-    setModel(DEFAULT_MODELS[p]);
-    setBaseUrl(p === "custom" ? "http://localhost:1234/v1/chat/completions" : "");
-  };
+  const { provider, apiKey, model, baseUrl } = config;
+  const isCustom = provider === "custom";
+  const baseUrlHelp = BASE_URL_HELP[provider];
+  const baseUrlRequired = provider === "anthropic" || isCustom;
+
+  const canSave =
+    model.trim().length > 0 &&
+    (isCustom || apiKey.trim().length > 0) &&
+    (!baseUrlRequired || baseUrl.trim().length > 0);
 
   const handleSave = () => {
-    const config: LLMConfig = {
+    const next: LLMConfig = {
       provider,
       apiKey,
       model,
       ...(baseUrl && { baseUrl }),
     };
-    saveLLMConfig(config);
+    saveLLMConfig(next);
     setConfigured(true);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    flash();
   };
 
   const handleClear = () => {
     clearLLMConfig();
-    setProvider("gemini");
-    setApiKey("");
-    setModel(DEFAULT_MODELS.gemini);
-    setBaseUrl("");
+    setConfig(blankForm("gemini"));
     setConfigured(false);
   };
 
-  const isCustom = provider === "custom";
-  const showBaseUrl = provider === "anthropic" || provider === "openai" || isCustom;
-  const needsBaseUrl = provider === "anthropic" || isCustom;
-
-  const canSave = isCustom
-    ? baseUrl.trim().length > 0 && model.trim().length > 0
-    : apiKey.trim().length > 0 && model.trim().length > 0 &&
-      (!needsBaseUrl || baseUrl.trim().length > 0);
-
-  const inputCls =
-    "w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
-
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">
-        AI Provider
-      </h2>
-
+    <TitledCard title="AI Provider">
       {configured && (
-        <div className="mb-4 flex items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2">
-          <span className="text-sm text-green-700">
-            {PROVIDER_LABELS[provider]} configured
-          </span>
-        </div>
+        <Alert tone="success" className="mb-4">
+          {PROVIDER_LABELS[provider]} configured
+        </Alert>
       )}
 
       <div className="space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Provider
-          </label>
+        <Field label="Provider">
           <select
             value={provider}
-            onChange={(e) => handleProviderChange(e.target.value as LLMProvider)}
-            className={inputCls}
+            onChange={(e) => setConfig(blankForm(e.target.value as LLMProvider))}
+            className={inputClass}
           >
-            {LLM_PROVIDERS.map((p) => (
-              <option key={p} value={p}>
-                {PROVIDER_LABELS[p]}
+            {LLM_PROVIDERS.map((option) => (
+              <option key={option} value={option}>
+                {PROVIDER_LABELS[option]}
               </option>
             ))}
           </select>
-        </div>
+        </Field>
 
         {!isCustom && (
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              API Key
-            </label>
+          <Field label="API Key">
             <input
               type="password"
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) =>
+                setConfig((prev) => ({ ...prev, apiKey: e.target.value }))
+              }
               placeholder="Enter your API key"
-              className={inputCls}
+              className={inputClass}
             />
-          </div>
+          </Field>
         )}
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Model
-          </label>
+        <Field label="Model">
           <input
             type="text"
             value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder={isCustom ? "Model name loaded on your server" : undefined}
-            className={inputCls}
+            onChange={(e) =>
+              setConfig((prev) => ({ ...prev, model: e.target.value }))
+            }
+            placeholder={
+              isCustom ? "Model name loaded on your server" : undefined
+            }
+            className={inputClass}
           />
-        </div>
+        </Field>
 
-        {showBaseUrl && (
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              {isCustom ? "Chat Endpoint URL" : "Base URL"}
-              {provider === "anthropic" && (
-                <span className="ml-1 text-xs font-normal text-red-500">
-                  (required)
-                </span>
-              )}
-            </label>
+        {baseUrlHelp && (
+          <Field
+            label={
+              <>
+                {baseUrlHelp.label}
+                {provider === "anthropic" && (
+                  <span className="ml-1 text-xs font-normal text-red-500">
+                    (required)
+                  </span>
+                )}
+              </>
+            }
+            hint={baseUrlHelp.hint}
+          >
             <input
               type="url"
               value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder={
-                provider === "anthropic"
-                  ? "https://your-cors-proxy.example.com"
-                  : provider === "custom"
-                    ? "http://localhost:1234/v1/chat/completions"
-                    : "https://api.openai.com/v1"
+              onChange={(e) =>
+                setConfig((prev) => ({ ...prev, baseUrl: e.target.value }))
               }
-              className={inputCls}
+              placeholder={baseUrlHelp.placeholder}
+              className={inputClass}
             />
-            {provider === "anthropic" && (
-              <p className="mt-1 text-xs text-gray-500">
-                Anthropic's API does not support browser requests (CORS).
-                Provide a CORS proxy URL that forwards to api.anthropic.com.
-              </p>
-            )}
-            {provider === "openai" && (
-              <p className="mt-1 text-xs text-gray-500">
-                Optional. Override to use an OpenAI-compatible endpoint.
-              </p>
-            )}
-            {provider === "custom" && (
-              <p className="mt-1 text-xs text-gray-500">
-                Full URL to the chat completions endpoint on your server
-                (e.g. LM Studio, Ollama, vLLM).
-              </p>
-            )}
-          </div>
+          </Field>
         )}
 
-        {saved && (
-          <p className="text-sm text-green-600">Saved!</p>
-        )}
+        {saved && <p className="text-sm text-green-600">Saved!</p>}
 
         <div className="flex gap-2">
-          <button
-            onClick={handleSave}
-            disabled={!canSave}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
+          <Button onClick={handleSave} disabled={!canSave}>
             Save
-          </button>
+          </Button>
           {configured && (
-            <button
-              onClick={handleClear}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
+            <Button variant="secondary" onClick={handleClear}>
               Clear
-            </button>
+            </Button>
           )}
         </div>
       </div>
-    </div>
+    </TitledCard>
   );
 }

@@ -2,9 +2,11 @@ import type { ApplicationFormData } from "../../types/application";
 import type { LLMConfig } from "../../types/llm";
 import type { LLMService } from "./llm-service";
 import { parseExtractedJSON } from "./llm-service";
+import { postJson, requireText } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
-const responseFormat = {
+/** Structured-output schema; ignored by servers that don't support it. */
+const RESPONSE_FORMAT = {
   type: "json_schema",
   json_schema: {
     name: "job_posting_extraction",
@@ -31,16 +33,23 @@ const responseFormat = {
   },
 };
 
+interface ChatCompletionResponse {
+  choices?: { message?: { content?: string; reasoning_content?: string } }[];
+}
+
+const looksLikeJson = (text: string) => text.includes("{") && text.includes("}");
+
+/** OpenAI and any OpenAI-compatible endpoint (LM Studio, Ollama, vLLM, ...). */
 export class OpenAILLMService implements LLMService {
-  private apiKey: string;
-  private model: string;
-  private endpoint: string;
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly endpoint: string;
 
   constructor(config: LLMConfig) {
     this.apiKey = config.apiKey;
     this.model = config.model;
-    // For custom/self-hosted providers the user supplies the full endpoint URL
-    // (e.g. http://localhost:1234/api/v1/chat). For OpenAI we build it.
+    // Self-hosted users supply the full chat endpoint; for OpenAI we build it
+    // from the (optionally overridden) API root.
     this.endpoint =
       config.provider === "custom" && config.baseUrl
         ? config.baseUrl
@@ -50,17 +59,10 @@ export class OpenAILLMService implements LLMService {
   async extractApplicationData(
     input: string,
   ): Promise<Partial<ApplicationFormData>> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (this.apiKey) {
-      headers["Authorization"] = `Bearer ${this.apiKey}`;
-    }
-
-    const response = await fetch(this.endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
+    const data = await postJson<ChatCompletionResponse>(
+      "OpenAI",
+      this.endpoint,
+      {
         ...(this.model && { model: this.model }),
         messages: [
           { role: "system", content: systemPrompt },
@@ -68,26 +70,22 @@ export class OpenAILLMService implements LLMService {
         ],
         temperature: 0,
         enable_thinking: false,
-        response_format: responseFormat,
-      }),
-    });
+        response_format: RESPONSE_FORMAT,
+      },
+      this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+    );
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`OpenAI API error (${response.status}): ${err}`);
-    }
+    const message = data.choices?.[0]?.message;
+    const content = message?.content ?? "";
+    const reasoning = message?.reasoning_content ?? "";
+    // Reasoning models sometimes put the answer in reasoning_content and
+    // leave content empty or prose-only, so take whichever holds the JSON.
+    const text = looksLikeJson(content)
+      ? content
+      : looksLikeJson(reasoning)
+        ? reasoning
+        : content || reasoning;
 
-    const data = await response.json();
-    const message = data?.choices?.[0]?.message;
-    const content: string = message?.content ?? "";
-    const reasoning: string = message?.reasoning_content ?? "";
-    // Prefer whichever field contains a JSON object; some reasoning models
-    // put the answer in reasoning_content and leave content empty or as plain text.
-    const hasJson = (s: string) => s.includes("{") && s.includes("}");
-    const text = hasJson(content) ? content : hasJson(reasoning) ? reasoning : content || reasoning;
-
-    if (!text) throw new Error("OpenAI returned an empty response");
-
-    return parseExtractedJSON(text);
+    return parseExtractedJSON(requireText(text, "OpenAI"));
   }
 }

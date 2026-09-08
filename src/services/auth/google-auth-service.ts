@@ -6,6 +6,10 @@ import type {
 } from "../../types/google";
 import { ENV } from "../../config/env";
 import { GOOGLE_SCOPES, USERINFO_ENDPOINT } from "../../config/google";
+import { setGapiAccessToken } from "./gapi-token";
+import { createLogger } from "../../utils/logger";
+
+const log = createLogger("auth");
 
 /**
  * Google Identity Services best practice: call initTokenClient ONCE
@@ -39,7 +43,7 @@ export class GoogleAuthService implements AuthService {
       },
       error_callback: (error) => {
         const msg = error.message || error.type || "OAuth error";
-        console.error("[auth] GSI error:", error);
+        log.error("GSI error:", error);
         this.pendingReject?.(new Error(msg));
         this.pendingResolve = null;
         this.pendingReject = null;
@@ -50,16 +54,7 @@ export class GoogleAuthService implements AuthService {
   }
 
   async login(): Promise<{ user: AuthUser; tokens: AuthTokens }> {
-    const tokenResponse = await this.requestToken("consent");
-    const tokens: AuthTokens = {
-      accessToken: tokenResponse.access_token,
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000,
-    };
-
-    window.gapi.client.setToken({
-      access_token: tokenResponse.access_token,
-    });
-
+    const tokens = await this.requestTokens("consent");
     const user = await this.fetchUserInfo(tokens.accessToken);
     return { user, tokens };
   }
@@ -68,32 +63,30 @@ export class GoogleAuthService implements AuthService {
     const token = window.gapi.client.getToken();
     if (token) {
       window.google.accounts.oauth2.revoke(token.access_token);
-      window.gapi.client.setToken(null);
+      setGapiAccessToken(null);
     }
   }
 
   async refreshToken(): Promise<AuthTokens> {
-    const tokenResponse = await this.requestToken("");
-    const tokens: AuthTokens = {
-      accessToken: tokenResponse.access_token,
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000,
-    };
-
-    window.gapi.client.setToken({
-      access_token: tokenResponse.access_token,
-    });
-
-    return tokens;
+    return this.requestTokens("");
   }
 
-  private requestToken(
-    prompt: string,
-  ): Promise<{ access_token: string; expires_in: number }> {
-    return new Promise((resolve, reject) => {
+  /** Request a token, install it on the gapi client, and return it. */
+  private async requestTokens(prompt: string): Promise<AuthTokens> {
+    const response = await new Promise<{
+      access_token: string;
+      expires_in: number;
+    }>((resolve, reject) => {
       this.pendingResolve = resolve;
       this.pendingReject = reject;
       this.ensureTokenClient().requestAccessToken({ prompt });
     });
+
+    setGapiAccessToken(response.access_token);
+    return {
+      accessToken: response.access_token,
+      expiresAt: Date.now() + response.expires_in * 1000,
+    };
   }
 
   private async fetchUserInfo(accessToken: string): Promise<AuthUser> {

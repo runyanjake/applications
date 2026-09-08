@@ -1,4 +1,8 @@
-import type { ApplicationStatus, Currency } from "../types/application";
+import type {
+  ApplicationStatus,
+  Currency,
+  InterestLevel,
+} from "../types/application";
 import { getTimezone } from "./timezone-store";
 
 const CURRENCY_SYMBOLS: Record<Currency, string> = {
@@ -73,16 +77,6 @@ export function formatStatus(status: ApplicationStatus): string {
   return STATUS_LABELS[status];
 }
 
-const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  bookmarked: "bg-gray-100 text-gray-700",
-  applied: "bg-indigo-100 text-indigo-700",
-  interviewing: "bg-yellow-100 text-yellow-700",
-  offered: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-  withdrawn: "bg-orange-100 text-orange-700",
-  ghosted: "bg-purple-100 text-purple-700",
-};
-
-export function statusColor(status: ApplicationStatus): string {
-  return STATUS_COLORS[status];
+export function formatInterest(interest: InterestLevel): string {
+  return interest.charAt(0).toUpperCase() + interest.slice(1);
 }

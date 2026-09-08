@@ -1,13 +1,9 @@
 import type { AuthUser } from "../../types/auth";
+import { TitledCard } from "../ui/card";
 
-interface UserInfoCardProps {
-  user: AuthUser;
-}
-
-export function UserInfoCard({ user }: UserInfoCardProps) {
+export function UserInfoCard({ user }: { user: AuthUser }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-6">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">Account</h2>
+    <TitledCard title="Account">
       <div className="flex items-center gap-4">
         <img
           src={user.avatarUrl}
@@ -20,6 +16,6 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
           <p className="text-sm text-gray-500">{user.email}</p>
         </div>
       </div>
-    </div>
+    </TitledCard>
   );
 }

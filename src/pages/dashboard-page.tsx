@@ -1,21 +1,15 @@
 import { useApplications } from "../hooks/use-applications";
-import { useStorage } from "../hooks/use-storage";
-import { PageHeader } from "../components/shared/page-header";
+import { PageHeader } from "../components/ui/page-header";
+import { EmptyState } from "../components/ui/empty-state";
+import { RequireSpreadsheet } from "../components/routing/require-spreadsheet";
 import { SummaryCards } from "../components/dashboard/summary-cards";
 import { RecentApplications } from "../components/dashboard/recent-applications";
-import { EmptyState } from "../components/shared/empty-state";
-import { LoadingSpinner } from "../components/shared/loading-spinner";
-import { SpreadsheetSetup } from "../components/dashboard/spreadsheet-setup";
 
 export function DashboardPage() {
-  const { isConfigured } = useStorage();
-  const { applications, isLoading } = useApplications();
-
-  if (!isConfigured) return <SpreadsheetSetup />;
-  if (isLoading) return <LoadingSpinner className="py-32" />;
+  const { applications } = useApplications();
 
   return (
-    <div>
+    <RequireSpreadsheet>
       <PageHeader title="Dashboard" />
 
       {applications.length === 0 ? (
@@ -31,6 +25,6 @@ export function DashboardPage() {
           </div>
         </>
       )}
-    </div>
+    </RequireSpreadsheet>
   );
 }

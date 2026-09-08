@@ -2,25 +2,47 @@ import { useState } from "react";
 import type { ApplicationFormData } from "../../types/application";
 import { getLLMConfig } from "../../utils/llm-store";
 import { createLLMService } from "../../services/llm/llm-service";
+import { createLogger } from "../../utils/logger";
+import { Alert } from "../ui/alert";
+import { Button } from "../ui/button";
+import { SparkIcon } from "../ui/icons";
 
-interface LLMFillButtonProps {
-  onFill: (data: Partial<ApplicationFormData>) => void;
-}
+const log = createLogger("llm");
 
-const REQUIRED_FIELDS: (keyof ApplicationFormData)[] = ["position", "companyName"];
+const REQUIRED_FIELDS: (keyof ApplicationFormData)[] = [
+  "position",
+  "companyName",
+];
 
-function describeResult(result: Partial<ApplicationFormData>): {
-  filledCount: number;
-  missingRequired: string[];
-} {
-  const filled = Object.keys(result).filter(
-    (k) => result[k as keyof ApplicationFormData] != null && result[k as keyof ApplicationFormData] !== "",
+function describeResult(result: Partial<ApplicationFormData>) {
+  const filled = REQUIRED_FIELDS.filter(
+    (field) => result[field] != null && result[field] !== "",
   );
-  const missingRequired = REQUIRED_FIELDS.filter((f) => !filled.includes(f));
-  return { filledCount: filled.length, missingRequired };
+  return {
+    filledCount: Object.values(result).filter(
+      (value) => value != null && value !== "",
+    ).length,
+    missingRequired: REQUIRED_FIELDS.filter((f) => !filled.includes(f)),
+  };
 }
 
-export function LLMFillButton({ onFill }: LLMFillButtonProps) {
+function partialFillMessage(
+  filledCount: number,
+  missing: (keyof ApplicationFormData)[],
+): string {
+  const plural = missing.length > 1;
+  return `Filled ${filledCount} field${filledCount !== 1 ? "s" : ""}, but ${missing.join(
+    " and ",
+  )} ${plural ? "were" : "was"} not found. You may need to fill ${
+    plural ? "those" : "that"
+  } manually.`;
+}
+
+export function LLMFillButton({
+  onFill,
+}: {
+  onFill: (data: Partial<ApplicationFormData>) => void;
+}) {
   const [showInput, setShowInput] = useState(false);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,37 +60,35 @@ export function LLMFillButton({ onFill }: LLMFillButtonProps) {
     setWarning(null);
 
     try {
-      const service = createLLMService(config);
-      const result = await service.extractApplicationData(text.trim());
+      const result = await createLLMService(config).extractApplicationData(
+        text.trim(),
+      );
       const { filledCount, missingRequired } = describeResult(result);
 
       if (filledCount === 0) {
-        setError("The AI returned no usable data. Try rephrasing or check your provider settings.");
+        setError(
+          "The AI returned no usable data. Try rephrasing or check your provider settings.",
+        );
         return;
       }
 
-      // Always apply whatever we got
       onFill(result);
 
       if (missingRequired.length > 0) {
-        // Partial fill — keep panel open with a warning so user can review
-        setWarning(
-          `Filled ${filledCount} field${filledCount !== 1 ? "s" : ""}, but ${missingRequired.join(" and ")} ${missingRequired.length > 1 ? "were" : "was"} not found. You may need to fill ${missingRequired.length > 1 ? "those" : "that"} manually.`,
-        );
+        // Partial fill — leave the panel open so the user can review
+        setWarning(partialFillMessage(filledCount, missingRequired));
       } else {
-        // Good fill — close
         setText("");
         setShowInput(false);
       }
     } catch (err) {
+      log.error("Extraction failed:", err);
       const raw = err instanceof Error ? err.message : String(err);
-      console.error("[llm] Extraction failed:", err);
-      // Surface a clean message; keep the textarea so the user can retry
-      if (raw.toLowerCase().includes("json")) {
-        setError("The AI response could not be parsed as JSON. The model may have returned plain text instead of structured data.");
-      } else {
-        setError(raw);
-      }
+      setError(
+        raw.toLowerCase().includes("json")
+          ? "The AI response could not be parsed as JSON. The model may have returned plain text instead of structured data."
+          : raw,
+      );
     } finally {
       setLoading(false);
     }
@@ -76,25 +96,10 @@ export function LLMFillButton({ onFill }: LLMFillButtonProps) {
 
   return (
     <div>
-      <button
-        onClick={() => setShowInput(!showInput)}
-        className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-      >
-        <svg
-          className="h-4 w-4 text-purple-500"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M13 10V3L4 14h7v7l9-11h-7z"
-          />
-        </svg>
+      <Button variant="secondary" onClick={() => setShowInput(!showInput)}>
+        <SparkIcon className="h-4 w-4 text-purple-500" />
         Auto-fill with AI
-      </button>
+      </Button>
 
       {showInput && (
         <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-4">
@@ -115,25 +120,25 @@ export function LLMFillButton({ onFill }: LLMFillButtonProps) {
           />
 
           {error && (
-            <div className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <Alert tone="error" className="mb-2">
               {error}
-            </div>
+            </Alert>
           )}
-
           {warning && (
-            <div className="mb-2 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+            <Alert tone="warning" className="mb-2">
               {warning}
-            </div>
+            </Alert>
           )}
 
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="accent"
+              size="sm"
               onClick={handleExtract}
               disabled={!isConfigured || loading || !text.trim()}
-              className="rounded-md bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
             >
               {loading ? "Extracting..." : "Extract Details"}
-            </button>
+            </Button>
             {!isConfigured && (
               <span className="text-xs text-purple-500">
                 Configure your AI provider in Settings
