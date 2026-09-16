@@ -51,5 +51,6 @@ services:
       LOG_RETENTION: ${LOG_RETENTION:-30d}
       LOG_ROTATE_FREQUENCY: ${LOG_ROTATE_FREQUENCY:-1d}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_CONSOLE_FORMAT: ${LOG_CONSOLE_FORMAT:-pretty}
     volumes:
       - ${LOG_DIR:-/pwspool/software/applications/logs}:/app/logs

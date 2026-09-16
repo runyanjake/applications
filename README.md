@@ -1,177 +1,93 @@
 # Applications
-A bring-your-own-data, bring-your-own-LLM job application tracking site.
-Gain insights through an analytics breakdown, and optimize your application pipeline via integrations with major AI providers.
+A bring-your-own-data, bring-your-own-LLM job application tracker backed by your own Google Sheet.
 
-## Tech Stack
-- **Frontend:** React + TypeScript (Vite)
-- **Storage:** Google Sheets (via Google Sheets API) — one sheet named `Applications`, columns A–R
-- **Charts:** [Apache ECharts](https://echarts.apache.org/) via `echarts-for-react`
-  - Donut breakdowns, status timeline, and a pipeline Sankey
-  - The status timeline is downsampled to day/week/month buckets in the user's timezone
-    ([date-fns](https://date-fns.org/) + `@date-fns/tz`), with a choice of aggregation:
-    count at end of period, peak during period, or moves into each status
-  - The Sankey supports node dragging and path highlighting on the analytics page
-  - ECharts is code-split: it only downloads when you open Analytics or Report
-- **AI:** Bring-your-own LLM — Gemini, OpenAI, Anthropic (via CORS proxy), or any OpenAI-compatible endpoint.
-  Nothing LLM-related is deployed with the app; see [Bring Your Own LLM](#bring-your-own-llm)
+## LM Studio Configuration
+Self-hosted models are called straight from the browser. Nothing LLM-related is deployed with the app.
 
-## Logging
-Client events are posted to `/api/logs`, which nginx proxies to a small **log sink**
-(`server/`, Node + winston). The sink writes newline-delimited JSON to
-`/app/logs`, mounted from `${LOG_DIR}` (default `/pwspool/software/applications/logs`):
+1. **Load the model:** in the **Developer** tab, load a chat model (7B+; smaller models often can't do structured output). In its load settings, set **Context Length** to 8192 or more, because the 2k/4k defaults cut off long postings. From the CLI: `lms load <model> --context-length 8192`.
+2. **Start the server:** in the server settings, turn on **Enable CORS** and start the server.
+3. **Connect the app:** in **Settings → AI Provider**, pick **Self-hosted (OpenAI-compatible)**, set the URL to `http://localhost:1234/v1/chat/completions`, then click **Discover** and pick the model.
+4. **Leave the app's Structured Output toggle off.** The JSON schema is sent with every request as `response_format`.
+5. **Check that the schema is enforced.** Run the command below. It should return `{"title": ...}`, not a poem:
+   ```bash
+   curl http://localhost:1234/v1/chat/completions -H "Content-Type: application/json" -d '{
+     "model": "<model id>",
+     "messages": [{"role": "user", "content": "Write a poem about the sea."}],
+     "response_format": {"type": "json_schema", "json_schema": {"name": "test", "strict": true,
+       "schema": {"type": "object", "properties": {"title": {"type": "string"}},
+                  "required": ["title"], "additionalProperties": false}}}}'
+   ```
 
+## Key Features
+- **Applications in your Google Sheet:** track applications, with status history stored in your own spreadsheet.
+- **AI auto-fill:** fill the form from a pasted job posting with Gemini, OpenAI, Anthropic (via a CORS proxy) or any OpenAI-compatible server, with model discovery from the provider.
+- **Analytics:** status and company breakdowns, a draggable pipeline Sankey, and a status timeline grouped by day, week or month.
+- **Printable report** for any date range.
+- **Server-side logging:** client logs are written to daily-rotated files by a log-sink container.
+
+## System Design
+```mermaid
+flowchart LR
+  user["Browser (React SPA)"]
+  subgraph host["Docker host"]
+    traefik["Traefik"]
+    app["applications<br/>nginx: SPA, /config.js, /api/logs proxy"]
+    logger["applications-logger<br/>Node + winston"]
+    logs[("LOG_DIR<br/>daily JSON logs")]
+  end
+  google["Google OAuth, Sheets,<br/>Drive, Picker APIs"]
+  llm["LLM provider<br/>Gemini / OpenAI / Anthropic / LM Studio"]
+
+  user -->|HTTPS| traefik --> app
+  app -->|/api/logs| logger --> logs
+  user -->|"read/write sheet"| google
+  user -->|"extract posting"| llm
 ```
-applications-2026-09-07.log
-applications-2026-09-08.log   <- one file per UTC day
-```
+Details on logging, LLM requests and the time series are in [`.claude/DESIGN.md`](.claude/DESIGN.md).
 
-Rotation is time based (`LOG_ROTATE_FREQUENCY`, default `1d`) and retention is expressed in
-days (`LOG_RETENTION`, default `30d`), so files older than the window are deleted automatically.
-No logrotate or cron is involved.
+## Local Dev Prerequisites
+- Node.js >= 22 and npm
+- Docker Compose >= 2.0 (production only)
+- A Google Cloud project with the **Sheets**, **Drive** and **Picker** APIs enabled, an OAuth client ID and an API key. If the key has referrer restrictions, the app's origin must be allowed, and it must also be listed as an authorized JavaScript origin on the OAuth client.
 
-Every event is fanned out to **both** destinations at once — the rotating file *and* the
-container's stdout/stderr — so the same stream is visible live without touching the volume:
+Install dependencies with `npm install`, plus `npm --prefix server install` for the log sink.
 
+## Configuration & Environment Variables
+Set these in `.env` (copy it from `.env.example`).
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `VITE_GOOGLE_CLIENT_ID` | — | **Required.** Baked into the bundle at build time |
+| `VITE_GOOGLE_API_KEY` | — | **Required.** Baked into the bundle at build time |
+| `DOMAIN` | `apply.whitney.rip` | Traefik host rule |
+| `LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error`. Read at container start by both the client (via `/config.js`) and the sink |
+| `LOG_DIR` | `/pwspool/software/applications/logs` | Host directory for log files |
+| `LOG_RETENTION` | `30d` | Log files older than this are deleted |
+| `LOG_ROTATE_FREQUENCY` | `1d` | How often a new log file is started |
+| `LOG_CONSOLE_FORMAT` | `pretty` | `json` when a collector reads `docker logs` |
+
+## Operational Runbook
 ```bash
-docker logs -f applications-logger
-03:18:20.649 INFO  [applications] application.created {"data":{"id":"a1","company":"Acme"},...}
-03:18:20.650 ERROR [sync] Load from spreadsheet failed: caller lacks permission (HTTP 403)
-```
-
-Errors go to stderr, everything else to stdout. Set `LOG_CONSOLE_FORMAT=json` when a log
-collector consumes the docker stream; the file is always JSON regardless.
-
-**What gets recorded**
-- CRUD on applications — `application.created`, `application.updated` (field names and any
-  status transition, never the field values), `application.deleted`
-- Persistence — `applications.loaded`, `applications.synced`, `applications.overwritten`
-- Session — `auth.signed_in`, `auth.signed_out`
-- Every warning and error, including uncaught exceptions and unhandled rejections
-- Debug output only when verbose logging is enabled
-
-Each line carries a per-tab `sessionId` and the signed-in user's opaque Google account id
-(`userId`) — never an email address. The sink redacts anything resembling an API key or access
-token before writing, caps event and field sizes, and drops requests over 64 KB.
-
-Logging is best effort: if the sink is unreachable the client retries a few times, then stops
-for that session. The app itself is unaffected.
-
-**Log level**
-`LOG_LEVEL` (`debug`, `info`, `warn` or `error`; default `info`) is read when the containers
-start, so changing it needs a container recreate, not a rebuild. It applies to both sides:
-- the log sink drops anything below it
-- the browser client gets it from `/config.js`, which nginx renders from the container
-  environment at startup; events below the level are neither printed nor shipped
-
-It is deployment configuration only — there is no in-app switch. `npm run dev` always logs at
-`debug`.
-
-CI gates on this: the pipeline waits for the `logger` container to report healthy and POSTs a
-`ci.smoke` event through nginx, so a broken sink fails the build instead of crash-looping in
-production. Each successful deploy therefore leaves a `ci.smoke` marker in that day's file.
-
-```bash
-# tail today's log on the host
-tail -f /pwspool/software/applications/logs/applications-$(date -u +%F).log
-
-# just the CRUD trail
-jq -c 'select(.scope == "applications")' /pwspool/software/applications/logs/*.log
-
-# just errors
-jq -c 'select(.level == "error")' /pwspool/software/applications/logs/*.log
-```
-
-## Layout
-```
-src/
-  components/
-    ui/            presentational primitives (button, card, alert, field, icons, ...)
-    charts/        ECharts wrappers built on a shared frame + theme
-    applications/  table, form, filters, badges
-    storage/       spreadsheet picker, setup screen, sheet-creation prompt
-    sync/          sync indicator + settings card
-    settings/      account, AI provider, timezone
-    routing/       auth gates and the spreadsheet gate
-  providers/       React contexts (*-context.ts) and their providers (*-provider.tsx)
-  services/        auth, storage, picker, and LLM integrations
-  utils/           formatting, analytics, sync, logging, error decoding
-server/            log sink: HTTP ingest + winston daily-rotate transport
-```
-
-## Google Cloud Setup
-The project behind `VITE_GOOGLE_CLIENT_ID` / `VITE_GOOGLE_API_KEY` needs **all three** APIs enabled:
-
-| API | Used for |
-| --- | --- |
-| Google Sheets API | reading and writing application data |
-| Google Drive API | listing spreadsheets in the picker |
-| Google Picker API | rendering the picker dialog itself |
-
-If the API key has HTTP-referrer restrictions, the deployment's origin must be listed, and the
-OAuth client's authorized JavaScript origins must include it too.
-
-## Troubleshooting
-The app surfaces Google's actual error text rather than failing silently:
-- **Applications will not load** — the page shows the API error with a Retry button.
-- A missing Picker dialog almost always means the Google Picker API is not enabled.
-- For more detail, redeploy with `LOG_LEVEL=debug`, which turns on `[storage]`, `[sync]`,
-  `[sheets]`, `[picker]`, `[auth]` and `[llm]` debug output. Warnings and errors are always logged
-  unless the level is raised above them.
-
-## Bring Your Own LLM
-The app does not ship or deploy a model. Each user picks a provider in
-**Settings → AI Provider** and the browser talks to it directly:
-
-| Provider | Needs |
-| --- | --- |
-| Google Gemini | API key |
-| OpenAI | API key; optional base URL for OpenAI-compatible hosts |
-| Anthropic | API key and a CORS proxy base URL |
-| Self-hosted (OpenAI-compatible) | full chat completions URL, e.g. `http://localhost:1234/v1/chat/completions` |
-
-**Discover** asks the provider's model-listing endpoint (`GET /models`) which models the key or
-server can use and turns the Model field into a picker. For LM Studio it also shows whether each
-model is loaded or only downloaded. **Enter a model name manually…** switches back to free text.
-
-Every AI request is a fresh single-turn chat: the system prompt from
-`src/prompts/extract-job-posting.md` plus one user message holding the pasted posting, with runs
-of whitespace collapsed first. The prompt only extracts fields; it does not summarize, so Notes
-is left for the user to fill in. No conversation history is kept or resent.
-
-### Self-hosting with LM Studio
-1. Download a chat-focused model in LM Studio.
-2. In the server tab, load the model and start the server. Enable CORS (off by default).
-3. The app sends a JSON schema as structured output (Server > Inference > Structured Output).
-   Raise the context length if needed (Server > Load > Context And Offload > Context Length) —
-   the 2k and 4k defaults were too small for long postings.
-
-## Running (Local)
-```bash
-cp .env.example .env   # fill in your Google credentials
+# Local setup & development (http://127.0.0.1:5173)
+git clone git@github.com:runyanjake/applications.git && cd applications
+cp .env.example .env            # fill in the Google credentials
 npm install
 npm run dev
+npm --prefix server install && npm run logs   # optional, second shell: log sink writing ./logs
 
-# optional, in a second shell: the log sink, writing to ./logs
-npm --prefix server install && npm run logs
-```
-The dev server proxies `/api/logs` to `127.0.0.1:8080`. Without the sink running, log
-shipping quietly disables itself after a few attempts.
+# Linting & type-checking (no test suite yet)
+npm run lint
+npx tsc -b
 
-## Running (Prod)
-```bash
-docker compose down && docker system prune -af && docker compose up -d
-docker logs -f applications-logger   # live application + error events
-```
-The build fails fast if `VITE_GOOGLE_CLIENT_ID` or `VITE_GOOGLE_API_KEY` is missing, since Vite
-inlines both at build time and a bundle without them cannot reach Google.
-
-Deploys normally go through the Jenkins pipeline (`Jenkinsfile`), which lints and type-checks via
-`docker build --target ci`, redeploys, then health-checks and smoke-tests both containers.
-
-This brings up two containers: `applications` (nginx + the built SPA, published through Traefik)
-and `applications-logger` (the log sink, reachable only on the private `applications`
-bridge network). The log directory on the host must exist and be writable by the container:
-
-```bash
+# Production build & run (Jenkins runs the same steps, then health and smoke checks)
 sudo mkdir -p /pwspool/software/applications/logs
+docker build --target ci -t applications-ci .
+docker compose up -d --build
+
+# Common operations
+docker logs -f applications-logger                                         # live log stream
+tail -f /pwspool/software/applications/logs/applications-$(date -u +%F).log
+jq -c 'select(.level == "error")' /pwspool/software/applications/logs/*.log
+LOG_LEVEL=debug docker compose up -d                                        # change level, no rebuild
+docker compose down
 ```

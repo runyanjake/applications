@@ -4,6 +4,7 @@ import { GeminiLLMService } from "./gemini-llm-service";
 import { OpenAILLMService } from "./openai-llm-service";
 import { AnthropicLLMService } from "./anthropic-llm-service";
 import { createLogger } from "../../utils/logger";
+import { normalizeLocation } from "../../utils/normalize-location";
 
 const log = createLogger("llm");
 
@@ -82,6 +83,10 @@ export function parseExtractedJSON(
 
   log.debug("Raw response:", text);
 
+  // Some older models emit a literal "/n" between members instead of a
+  // newline (`"https://scale.com",/n"city"`), which is invalid JSON
+  cleaned = cleaned.replace(/([{,])\s*\/n\s*(?=")/g, "$1\n");
+
   const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
   // Keep only known keys that arrived with the expected type
@@ -111,6 +116,7 @@ export function parseExtractedJSON(
   copyIfType("remote", "boolean");
   copyIfType("salaryMin", "number");
   copyIfType("salaryMax", "number");
+  Object.assign(result, normalizeLocation(result));
 
   log.debug("Parsed result:", result);
 
