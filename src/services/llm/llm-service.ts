@@ -46,6 +46,19 @@ export function createLLMService(config: LLMConfig): LLMService {
 }
 
 /**
+ * Notes are a bulleted list, one "- " item per line. Models vary the marker
+ * ("•", "*", "1.") or skip it, so every non-empty line is rewritten to "- ".
+ */
+export function toBulletList(notes: string): string {
+  return notes
+    .split(/\n+/)
+    .map((line) => line.trim().replace(/^(?:[-*•]|\d+[.)])\s*/, ""))
+    .filter(Boolean)
+    .map((line) => `- ${line}`)
+    .join("\n");
+}
+
+/**
  * Parse the LLM response text into a partial ApplicationFormData object.
  * Strips markdown code fences if the model wraps its response.
  */
@@ -109,14 +122,24 @@ export function parseExtractedJSON(
     "state",
     "country",
     "currency",
-    "notes",
   ] as const) {
     copyIfType(key, "string");
   }
+  // Notes may arrive as an array of bullets despite the schema
+  if (Array.isArray(parsed.notes)) {
+    parsed.notes = parsed.notes.filter((n) => typeof n === "string").join("\n");
+  }
+  copyIfType("notes", "string");
   copyIfType("remote", "boolean");
   copyIfType("salaryMin", "number");
   copyIfType("salaryMax", "number");
-  Object.assign(result, normalizeLocation(result));
+  // Replace the raw location fields with their cleaned, de-duplicated form
+  const { city, state, country } = result;
+  delete result.city;
+  delete result.state;
+  delete result.country;
+  Object.assign(result, normalizeLocation({ city, state, country }));
+  if (result.notes) result.notes = toBulletList(result.notes);
 
   log.debug("Parsed result:", result);
 

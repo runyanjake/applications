@@ -18,12 +18,12 @@ reinterpret the JSON.
 ## LLM Requests
 - Each request is a fresh single-turn chat: the system prompt `src/prompts/extract-job-posting.md`
   plus the pasted posting, with runs of whitespace collapsed. No conversation history is kept.
-- The model extracts the form fields and writes Notes: a 1–2 sentence overview plus notable
-  requirements (unusual stack, named tools, certifications), skipping standard items.
+- The model extracts the form fields and writes Notes as a "- " bulleted list: a 1–2 sentence overview plus one bullet per notable
+  requirement (unusual stack, named tools, certifications), skipping standard items.
 - OpenAI-compatible requests include a JSON schema as `response_format`. Local servers get
   plain types; OpenAI gets nullable fields, as its strict mode requires.
 - The response is cleaned before use: code fences and `<think>` blocks are stripped, unknown keys
-  are dropped, and city/state/country are rewritten as matching comma-separated lists of names and codes.
+  are dropped, and city/state/country become de-duplicated comma-separated lists of names and codes.
 - **Discover** calls the provider's model list (`GET /models`). For LM Studio it tries
   `/api/v0/models` first, which reports whether each model is loaded.
 
