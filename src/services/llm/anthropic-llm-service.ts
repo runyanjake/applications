@@ -1,7 +1,7 @@
 import type { ApplicationFormData } from "../../types/application";
 import type { LLMConfig, LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
-import { buildUserMessage, parseExtractedJSON } from "./llm-service";
+import { parseExtractedJSON } from "./llm-service";
 import { getJson, postJson, requireText } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
@@ -42,7 +42,7 @@ export class AnthropicLLMService implements LLMService {
         model: this.config.model,
         max_tokens: 1024,
         system: systemPrompt,
-        messages: [{ role: "user", content: buildUserMessage(input) }],
+        messages: [{ role: "user", content: input }],
       },
       this.headers,
     );

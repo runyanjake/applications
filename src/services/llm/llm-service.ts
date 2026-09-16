@@ -20,14 +20,6 @@ export interface LLMService {
 }
 
 /**
- * The user turn: the posting fenced off from instructions, then the output
- * rule repeated last, where older models pay the most attention to it.
- */
-export function buildUserMessage(posting: string): string {
-  return `Job posting:\n"""\n${posting}\n"""\n\nRespond with only the JSON object.`;
-}
-
-/**
  * Pasted postings carry lots of layout whitespace (indentation, runs of blank
  * lines, non-breaking spaces). None of it helps the model, and it is sent and
  * tokenized on every request.

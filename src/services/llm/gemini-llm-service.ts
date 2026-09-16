@@ -1,7 +1,7 @@
 import type { ApplicationFormData } from "../../types/application";
 import type { LLMConfig, LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
-import { buildUserMessage, parseExtractedJSON } from "./llm-service";
+import { parseExtractedJSON } from "./llm-service";
 import { getJson, postJson, requireText, sortModels } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
@@ -29,7 +29,7 @@ export class GeminiLLMService implements LLMService {
 
     const data = await postJson<GeminiResponse>("Gemini", url, {
       system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: buildUserMessage(input) }] }],
+      contents: [{ role: "user", parts: [{ text: input }] }],
       // JSON mode: no code fences or preamble to strip
       generationConfig: { responseMimeType: "application/json" },
     });
