@@ -1,7 +1,7 @@
 import type { ApplicationFormData } from "../../types/application";
 import type { LLMConfig, LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
-import { parseExtractedJSON } from "./llm-service";
+import { buildUserMessage, parseExtractedJSON } from "./llm-service";
 import { getJson, postJson, requireText, sortModels } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
@@ -23,7 +23,8 @@ const FIELDS: Record<string, { type: string; enum?: string[] }> = {
   notes: { type: "string" },
 };
 
-const ALWAYS_PRESENT = ["position", "companyName", "companyWebsite", "notes"];
+// Must match the "Always include" keys in the prompt
+const ALWAYS_PRESENT = ["position", "companyName", "notes"];
 
 /**
  * Structured-output schema; it is what actually stops a model inventing keys.
@@ -117,7 +118,7 @@ export class OpenAILLMService implements LLMService {
             // "/no_think" is Qwen's soft switch; only local servers need it
             content: this.selfHosted ? `/no_think\n${systemPrompt}` : systemPrompt,
           },
-          { role: "user", content: input },
+          { role: "user", content: buildUserMessage(input) },
         ],
         response_format: responseFormat(this.selfHosted),
         // api.openai.com rejects unknown parameters, and its reasoning models

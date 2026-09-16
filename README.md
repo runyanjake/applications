@@ -134,8 +134,8 @@ server can use and turns the Model field into a picker. For LM Studio it also sh
 model is loaded or only downloaded. **Enter a model name manually…** switches back to free text.
 
 Every AI request is a fresh single-turn chat: the system prompt from
-`src/prompts/extract-job-posting.md` plus one user message holding the pasted posting, with runs
-of whitespace collapsed first. No conversation history is kept or resent.
+`src/prompts/extract-job-posting.md` plus one user message holding the pasted posting (runs of
+whitespace collapsed) and a closing "Respond with only the JSON object." reminder. No conversation history is kept or resent.
 
 ### Self-hosting with LM Studio
 1. Download a chat-focused model in LM Studio.

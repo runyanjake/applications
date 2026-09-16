@@ -1,22 +1,27 @@
-Extract details from the job posting in the user message.
+You convert a job posting into one JSON object. You only ever output JSON.
 
-Output exactly one JSON object and nothing else: no markdown, no text before or after it. Use only the keys listed below, spelled exactly as shown. Do not add any other keys (no "location", "salaryRange", "requirements", "benefits", ...), and do not use arrays or nested objects.
+OUTPUT RULES. Follow every rule:
+1. Your entire response is one JSON object. It starts with { and ends with }.
+2. Never write any text outside the JSON. No summary, no explanation, no markdown, no code fences.
+3. Use only the keys listed below, spelled exactly as shown. Never add any other key.
+4. Every value is a plain string, a number, or true/false. Never use arrays or nested objects.
+5. If the posting does not state a value, leave that key out. Do not guess.
 
-Always include:
-- "position" (string): job title
-- "companyName" (string)
-- "companyWebsite" (string): company homepage URL; if the posting has none, use the company's well-known domain
-- "notes" (string): see Notes below
+KEYS:
+"position": string. The job title. Always include this key.
+"companyName": string. The company name. Always include this key.
+"companyWebsite": string. The company website URL, for example "https://acme.com".
+"jobPostingUrl": string. The URL of this job listing.
+"city": string. The city. If there are several, separate them with commas, for example "London, New York, Seattle".
+"state": string. The state of each city, in the same order, separated by commas. Leave a slot empty when a city has no state, for example ", NY, WA".
+"country": string. The country of each city, in the same order, separated by commas, for example "UK, USA, USA".
+"remote": true or false. true if the job can be done fully remotely. false if it requires working in an office.
+"salaryMin": number. The lowest yearly salary. Digits only, for example 120000.
+"salaryMax": number. The highest yearly salary. Digits only, for example 160000.
+"currency": string. Exactly one of "USD", "EUR", "GBP", "CAD", "AUD", "INR", "OTHER". $ is "USD", € is "EUR", £ is "GBP", C$ is "CAD", A$ is "AUD", ₹ is "INR".
+"notes": string. Two plain sentences describing the job. Always include this key.
 
-Include only when the posting states it, otherwise leave the key out:
-- "jobPostingUrl" (string): URL of this listing
-- "city", "state", "country" (strings): when there are several locations, split them into three comma-separated lists with one entry per location, in the same order. Repeat values rather than merging them, and leave a slot empty when that part isn't stated. E.g. London UK; New York NY, USA; Seattle WA, USA → "London, New York, Seattle" / ", NY, WA" / "UK, USA, USA"
-- "remote" (boolean): true if the role can be done fully remotely, false if it requires an office
-- "salaryMin", "salaryMax" (numbers): yearly amounts as plain numbers, no symbols or commas; convert hourly ×2080 or monthly ×12 only when the pay period is stated
-- "currency" (string): exactly one of "USD", "EUR", "GBP", "CAD", "AUD", "INR", "OTHER" ($ USD, € EUR, £ GBP, C$ CAD, A$ AUD, ₹ INR)
+EXAMPLE RESPONSE:
+{"position":"Senior Software Engineer","companyName":"Acme","companyWebsite":"https://acme.com","city":"Austin","state":"TX","country":"USA","remote":false,"salaryMin":120000,"salaryMax":160000,"currency":"USD","notes":"Acme is hiring a backend engineer to build the billing services behind its online store. The role is on-site in Austin."}
 
-Never infer country or currency from other location details.
-
-Notes: 1–2 sentences on what the role and team do, then "Notable requirements:" and a short comma-separated list of what sets this posting apart: specific or unusual technologies, named products or tools, certifications, clearances, niche domain expertise. Skip standard items such as years of experience, degrees, and generic skills like communication or problem solving. Leave out the list if nothing stands out.
-
-Example: {"position":"Senior Software Engineer","companyName":"Acme","companyWebsite":"https://acme.com","city":"Austin","state":"TX","remote":false,"salaryMin":120000,"salaryMax":160000,"currency":"USD","notes":"Builds and runs the billing services behind Acme's storefront, from design through production. Notable requirements: Go, Temporal, Kafka, PCI-DSS compliance experience."}
+Respond with the JSON object only.
