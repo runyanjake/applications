@@ -8,7 +8,7 @@ Always include:
 
 Include only when the posting states it, otherwise leave it out:
 - "jobPostingUrl": URL of this listing
-- "city", "state", "country": for several locations, comma-separated lists in the same order, e.g. "New York, Seattle" / "NY, WA" / "USA, USA"
+- "city", "state", "country": when there are several locations, split them into three comma-separated lists with one entry per location, in the same order. Repeat values rather than merging them, and leave a slot empty when that part isn't stated. E.g. London UK; New York NY, USA; Seattle WA, USA → "London, New York, Seattle" / ", NY, WA" / "UK, USA, USA"
 - "remote": true if the role can be done fully remotely, false if it requires an office
 - "salaryMin", "salaryMax": yearly amounts as plain numbers; convert hourly ×2080 or monthly ×12 only when the pay period is stated
 - "currency": "USD", "EUR", "GBP", "CAD", "AUD", "INR" or "OTHER" ($ USD, € EUR, £ GBP, C$ CAD, A$ AUD, ₹ INR)
