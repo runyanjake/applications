@@ -20,10 +20,11 @@ const FIELDS: Record<string, { type: string; enum?: string[] }> = {
   salaryMin: { type: "number" },
   salaryMax: { type: "number" },
   currency: { type: "string", enum: CURRENCIES },
+  notes: { type: "string" },
 };
 
 // Must match the "Always include" keys in the prompt
-const ALWAYS_PRESENT = ["position", "companyName", "companyWebsite"];
+const ALWAYS_PRESENT = ["position", "companyName", "companyWebsite", "notes"];
 
 /**
  * Structured-output schema; it is what actually stops a model inventing keys.

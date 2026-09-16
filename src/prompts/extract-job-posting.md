@@ -4,6 +4,7 @@ Always include:
 - "position": job title
 - "companyName"
 - "companyWebsite": company homepage URL; if the posting has none, use the company's well-known domain
+- "notes": 1–2 sentences on what the role does, then "Notable requirements:" and a comma-separated list of distinctive asks such as specific technologies, named tools or products, certifications, clearances or niche domain knowledge. Skip standard items like years of experience, degrees and soft skills. Leave out the list if nothing stands out
 
 Include only when the posting states it, otherwise leave it out:
 - "jobPostingUrl": URL of this listing
@@ -18,4 +19,4 @@ The city, state and country lists always have the same number of entries. Leave 
 
 Never infer currency from the location.
 
-Example: {"position":"Senior Software Engineer","companyName":"Acme","companyWebsite":"https://acme.com","city":"Austin, New York","state":"TX, NY","country":"US, US","remote":false,"salaryMin":120000,"salaryMax":160000,"currency":"USD"}
+Example: {"position":"Senior Software Engineer","companyName":"Acme","companyWebsite":"https://acme.com","city":"Austin, New York","state":"TX, NY","country":"US, US","remote":false,"salaryMin":120000,"salaryMax":160000,"currency":"USD","notes":"Builds and runs the billing services behind Acme's online store. Notable requirements: Go, Temporal, Kafka, PCI-DSS compliance."}
