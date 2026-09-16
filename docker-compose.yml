@@ -17,6 +17,10 @@ services:
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_GOOGLE_API_KEY: ${VITE_GOOGLE_API_KEY}
     restart: unless-stopped
+    environment:
+      # Client log level (debug|info|warn|error), read at container start —
+      # change it and recreate the container, no rebuild needed.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     # Deliberately no depends_on: nginx resolves the log sink lazily per request,
     # so a broken or missing logger must never stop the site from serving.
     networks:

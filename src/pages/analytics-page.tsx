@@ -13,7 +13,6 @@ import { describeDateRange } from "../utils/date-range";
 import {
   buildCompanyBreakdown,
   buildStatusBreakdown,
-  buildStatusTimeline,
 } from "../utils/analytics";
 
 export function AnalyticsPage() {
@@ -25,7 +24,6 @@ export function AnalyticsPage() {
     return {
       status: buildStatusBreakdown(filteredApplications),
       company: buildCompanyBreakdown(filteredApplications),
-      timeline: buildStatusTimeline(filteredApplications),
       activeCount: filteredApplications.filter((app) =>
         ACTIVE_STATUSES.includes(app.status),
       ).length,
@@ -99,7 +97,7 @@ export function AnalyticsPage() {
 
           <Card className="p-4">
             <StatusTimelineChart
-              data={charts.timeline}
+              applications={filteredApplications}
               title="Status Over Time"
             />
           </Card>

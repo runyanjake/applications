@@ -1,12 +1,16 @@
 import type { ApplicationFormData } from "../../types/application";
-import type { LLMConfig } from "../../types/llm";
+import type { LLMConfig, LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
 import { parseExtractedJSON } from "./llm-service";
-import { postJson, requireText } from "./llm-http";
+import { getJson, postJson, requireText } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
 interface AnthropicResponse {
   content?: { text?: string }[];
+}
+
+interface AnthropicModelList {
+  data?: { id: string; display_name?: string }[];
 }
 
 export class AnthropicLLMService implements LLMService {
@@ -21,6 +25,13 @@ export class AnthropicLLMService implements LLMService {
     this.baseUrl = config.baseUrl;
   }
 
+  private get headers() {
+    return {
+      "x-api-key": this.config.apiKey,
+      "anthropic-version": "2023-06-01",
+    };
+  }
+
   async extractApplicationData(
     input: string,
   ): Promise<Partial<ApplicationFormData>> {
@@ -33,13 +44,20 @@ export class AnthropicLLMService implements LLMService {
         system: systemPrompt,
         messages: [{ role: "user", content: input }],
       },
-      {
-        "x-api-key": this.config.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
+      this.headers,
     );
 
     const text = data.content?.[0]?.text ?? "";
     return parseExtractedJSON(requireText(text, "Anthropic"));
+  }
+
+  async listModels(): Promise<LLMModel[]> {
+    const data = await getJson<AnthropicModelList>(
+      "Anthropic",
+      `${this.baseUrl}/v1/models?limit=1000`,
+      this.headers,
+    );
+    // Already newest first, which is the useful order here
+    return (data.data ?? []).map((m) => ({ id: m.id, label: m.display_name }));
   }
 }

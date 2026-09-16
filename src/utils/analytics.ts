@@ -1,5 +1,5 @@
 import type { Application, ApplicationStatus } from "../types/application";
-import type { CategoryPoint, StatusTimelinePoint } from "../types/chart";
+import type { CategoryPoint } from "../types/chart";
 import { STATUS_HEX, paletteColor } from "../config/theme";
 import { formatStatus } from "./formatters";
 
@@ -54,61 +54,4 @@ export function buildCompanyBreakdown(
     value,
     color: paletteColor(index),
   }));
-}
-
-type StatusEvent = {
-  ts: string;
-  from: ApplicationStatus | null;
-  to: ApplicationStatus;
-};
-
-/**
- * Running status counts, emitting one point per instant at which something
- * actually changed (not on a fixed interval). O(n log n) via sort + streaming
- * delta over every application's history.
- */
-export function buildStatusTimeline(
-  applications: Application[],
-): StatusTimelinePoint[] {
-  const events: StatusEvent[] = [];
-  for (const app of applications) {
-    // `history` is absent on records restored from an older session payload,
-    // which is how a refresh could reach this with undefined here — the sheet
-    // mapper guards the same field on the way out.
-    const history = app.history ?? [];
-    if (history.length > 0) {
-      events.push(...history);
-    } else {
-      // Legacy application with no history: treat it as a single creation event
-      events.push({ ts: app.lastUpdated, from: null, to: app.status });
-    }
-  }
-  // A missing timestamp would sort unpredictably and plot as an Invalid Date
-  const dated = events.filter((event) => Boolean(event.ts));
-  if (dated.length === 0) return [];
-
-  dated.sort((a, b) => a.ts.localeCompare(b.ts));
-
-  const counts = { ...ZERO_COUNTS };
-  const points: StatusTimelinePoint[] = [];
-
-  for (let i = 0; i < dated.length; ) {
-    const ts = dated[i]!.ts;
-    // Collapse every event sharing this timestamp into one point
-    while (i < dated.length && dated[i]!.ts === ts) {
-      const { from, to } = dated[i]!;
-      if (from !== null) counts[from]--;
-      counts[to]++;
-      i++;
-    }
-    points.push({ ts, ...counts });
-  }
-
-  // Extend the line to now without implying a change happened
-  const nowTs = new Date().toISOString();
-  if (points[points.length - 1]!.ts < nowTs) {
-    points.push({ ts: nowTs, ...counts });
-  }
-
-  return points;
 }

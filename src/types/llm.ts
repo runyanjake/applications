@@ -22,3 +22,12 @@ export interface LLMConfig {
   model: string;
   baseUrl?: string;
 }
+
+/** A model reported by the provider's model-listing endpoint. */
+export interface LLMModel {
+  id: string;
+  /** Friendlier name, when the provider supplies one. */
+  label?: string;
+  /** Short status such as "loaded" / "not loaded" for self-hosted servers. */
+  detail?: string;
+}

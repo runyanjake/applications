@@ -13,3 +13,8 @@ declare module "*.md?raw" {
   const content: string;
   export default content;
 }
+
+/** Runtime config served as /config.js — see public/config.js and nginx.conf. */
+interface Window {
+  __APP_CONFIG__?: { logLevel?: string };
+}

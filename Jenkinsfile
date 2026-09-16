@@ -117,6 +117,13 @@ pipeline {
           fi
           echo "$body" | grep -q '<div id="root">' || { echo "GET / response missing expected SPA marker" >&2; exit 1; }
 
+          # nginx renders /config.js from LOG_LEVEL at start; a literal "${" means
+          # the template was not substituted and the client would ignore it.
+          if ! config_js="$(docker exec "$cid" wget -q -O - http://127.0.0.1:80/config.js)"; then
+            echo "GET /config.js did not return a successful response" >&2; exit 1
+          fi
+          echo "$config_js" | grep -Eq 'logLevel: "(debug|info|warn|error)"' || { echo "unexpected /config.js: $config_js" >&2; exit 1; }
+
           # Prove the logging path end to end: nginx must proxy /api/logs to the
           # sink, which answers 202 and writes the line to the mounted volume.
           # This exercises the whole chain the browser uses, and leaves a

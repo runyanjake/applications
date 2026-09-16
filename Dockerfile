@@ -26,7 +26,11 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Installed as a template: the image's entrypoint renders it into conf.d at
+# start, substituting only LOG_LEVEL (served to the SPA as /config.js).
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+ENV NGINX_ENVSUBST_FILTER=^LOG_LEVEL$
+ENV LOG_LEVEL=info
 EXPOSE 80
 # Liveness probe against the dedicated /healthz endpoint. Use 127.0.0.1 (not
 # localhost): nginx listens IPv4-only, but busybox wget would resolve localhost

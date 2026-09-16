@@ -117,21 +117,6 @@ export function enqueueLogEvent(event: RemoteLogEvent): void {
   else scheduleFlush();
 }
 
-/** Current transport state, surfaced by the Settings diagnostics panel. */
-export function getLogTransportStatus(): {
-  enabled: boolean;
-  queued: number;
-  failures: number;
-  sessionId: string;
-} {
-  return {
-    enabled: !disabled,
-    queued: queue.length,
-    failures,
-    sessionId: sessionId(),
-  };
-}
-
 /** Flush pending events while the page can still make requests. */
 export function installLogFlushHandlers(): void {
   document.addEventListener("visibilitychange", () => {

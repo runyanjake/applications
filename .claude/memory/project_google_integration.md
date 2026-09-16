@@ -37,4 +37,5 @@ HTTP-referrer restrictions instead.
 `describeGoogleError` in `src/utils/google-error.ts` decodes gapi's plain-object rejections
 (`{result:{error:{code,message}}}` etc.). Surface it in the UI; don't fall back to
 `err instanceof Error ? err.message : "..."`, which produces useless generic text.
-Settings → Diagnostics runs live checks; `localStorage["jat:debug"]="1"` enables debug logs.
+There is no in-app diagnostics panel (removed: users must not see or change integration
+config or logging). Debug logs come from deploying with `LOG_LEVEL=debug`.

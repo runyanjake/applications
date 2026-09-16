@@ -5,22 +5,31 @@ import {
 } from "./log-transport";
 
 /**
- * Scoped logger. Everything goes to the console; warnings, errors and audit
- * events are also shipped to the log-sink service, which writes the rotating
- * files under the mounted logs directory.
+ * Scoped logger. Events at or above the configured level go to the console
+ * and are shipped to the log-sink service, which writes the rotating files
+ * under the mounted logs directory.
  *
- * Debug output is opt-in via `localStorage["jat:debug"] = "1"` (always on in
- * development) and is only shipped when that flag is set.
+ * The level is deployment configuration, not a user setting: the container's
+ * `LOG_LEVEL` env var is served as `/config.js` (see nginx.conf). Development
+ * defaults to debug, production to info.
  */
-const DEBUG_KEY = "jat:debug";
+const LEVEL_RANK: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
 
-function debugEnabled(): boolean {
-  if (import.meta.env.DEV) return true;
-  try {
-    return localStorage.getItem(DEBUG_KEY) === "1";
-  } catch {
-    return false;
-  }
+function resolveLevel(): LogLevel {
+  const configured = window.__APP_CONFIG__?.logLevel?.toLowerCase();
+  if (configured && Object.prototype.hasOwnProperty.call(LEVEL_RANK, configured)) return configured as LogLevel;
+  return import.meta.env.DEV ? "debug" : "info";
+}
+
+const threshold = LEVEL_RANK[resolveLevel()];
+
+function enabled(level: LogLevel): boolean {
+  return LEVEL_RANK[level] >= threshold;
 }
 
 function stringify(value: unknown): string {
@@ -60,7 +69,7 @@ function emit(
     message: described.message,
     data: { ...described.data, ...data },
   };
-  if (level !== "debug" || debugEnabled()) enqueueLogEvent(remote);
+  if (enabled(level)) enqueueLogEvent(remote);
 }
 
 export interface Logger {
@@ -75,19 +84,19 @@ export function createLogger(scope: string): Logger {
   const prefix = `[${scope}]`;
   return {
     debug: (...args) => {
-      if (debugEnabled()) console.debug(prefix, ...args);
+      if (enabled("debug")) console.debug(prefix, ...args);
       emit(scope, "debug", args);
     },
     warn: (...args) => {
-      console.warn(prefix, ...args);
+      if (enabled("warn")) console.warn(prefix, ...args);
       emit(scope, "warn", args);
     },
     error: (...args) => {
-      console.error(prefix, ...args);
+      if (enabled("error")) console.error(prefix, ...args);
       emit(scope, "error", args);
     },
     audit: (event, data) => {
-      if (debugEnabled()) console.debug(prefix, event, data ?? "");
+      if (enabled("debug")) console.debug(prefix, event, data ?? "");
       emit(scope, "info", [event], event, data);
     },
   };

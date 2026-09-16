@@ -1,5 +1,5 @@
 import type { ApplicationFormData } from "../../types/application";
-import type { LLMConfig } from "../../types/llm";
+import type { LLMConfig, LLMModel } from "../../types/llm";
 import { GeminiLLMService } from "./gemini-llm-service";
 import { OpenAILLMService } from "./openai-llm-service";
 import { AnthropicLLMService } from "./anthropic-llm-service";
@@ -7,10 +7,29 @@ import { createLogger } from "../../utils/logger";
 
 const log = createLogger("llm");
 
+/**
+ * Every call is a fresh single-turn chat — the system prompt plus one user
+ * message — so no conversation state is kept or resent between requests.
+ */
 export interface LLMService {
   extractApplicationData(
     input: string,
   ): Promise<Partial<ApplicationFormData>>;
+  /** Models the configured endpoint reports as available. */
+  listModels(): Promise<LLMModel[]>;
+}
+
+/**
+ * Pasted postings carry lots of layout whitespace (indentation, runs of blank
+ * lines, non-breaking spaces). None of it helps the model, and it is sent and
+ * tokenized on every request.
+ */
+export function compactWhitespace(text: string): string {
+  return text
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function createLLMService(config: LLMConfig): LLMService {

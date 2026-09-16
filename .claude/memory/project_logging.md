@@ -22,7 +22,11 @@ JSON at `/app/logs`, bind-mounted from `${LOG_DIR}` (default
 - Logs carry a per-tab `sessionId` and the opaque Google `sub` as `userId` — deliberately **not**
   the email address, since the site is multi-user.
 - Client shipping is best effort: it disables itself after 3 consecutive failures so a missing
-  sink never affects the app. Status is visible in Settings → Diagnostics.
+  sink never affects the app.
+- Level is deployment config only: `LOG_LEVEL` env. nginx.conf is installed as an envsubst
+  template (`NGINX_ENVSUBST_FILTER=^LOG_LEVEL$`) and serves `/config.js` →
+  `window.__APP_CONFIG__.logLevel`, loaded by index.html before the bundle; `public/config.js` is
+  the dev fallback. Never reintroduce a user-facing toggle or `localStorage` debug flag.
 - `log.audit(event, data)` records CRUD (`application.created` / `.updated` / `.deleted`).
   Updates log changed *field names* only, never the values the user typed.
 

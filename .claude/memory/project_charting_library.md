@@ -28,3 +28,11 @@ All chart components use **Apache ECharts** via `echarts-for-react`. Recharts wa
 
 ECharts is ~1.1 MB, so `/analytics` and `/report` are `React.lazy` routes in `src/app.tsx` and
 `vite.config.ts` puts echarts in its own manual chunk. Keep new chart-using pages lazy.
+
+## Status timeline = downsampled series
+
+`src/utils/time-series.ts` turns the history event log into one point per calendar bucket
+(day/week/month, user timezone via date-fns + `@date-fns/tz`) with an aggregator
+(`last` / `max` / `entered`) and carry-forward fill — the OpenTSDB `interval-agg-fill` shape.
+Storage stays the event log in column R; do not plot raw events again (a busy day becomes a
+vertical line). Gauges render as `step: "end"` lines, never `smooth`.

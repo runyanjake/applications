@@ -1,7 +1,10 @@
 import { useState } from "react";
 import type { ApplicationFormData } from "../../types/application";
 import { getLLMConfig } from "../../utils/llm-store";
-import { createLLMService } from "../../services/llm/llm-service";
+import {
+  compactWhitespace,
+  createLLMService,
+} from "../../services/llm/llm-service";
 import { createLogger } from "../../utils/logger";
 import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -61,7 +64,7 @@ export function LLMFillButton({
 
     try {
       const result = await createLLMService(config).extractApplicationData(
-        text.trim(),
+        compactWhitespace(text),
       );
       const { filledCount, missingRequired } = describeResult(result);
 

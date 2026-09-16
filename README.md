@@ -7,9 +7,13 @@ Gain insights through an analytics breakdown, and optimize your application pipe
 - **Storage:** Google Sheets (via Google Sheets API) — one sheet named `Applications`, columns A–R
 - **Charts:** [Apache ECharts](https://echarts.apache.org/) via `echarts-for-react`
   - Donut breakdowns, status timeline, and a pipeline Sankey
+  - The status timeline is downsampled to day/week/month buckets in the user's timezone
+    ([date-fns](https://date-fns.org/) + `@date-fns/tz`), with a choice of aggregation:
+    count at end of period, peak during period, or moves into each status
   - The Sankey supports node dragging and path highlighting on the analytics page
   - ECharts is code-split: it only downloads when you open Analytics or Report
-- **AI:** Bring-your-own LLM — Gemini, OpenAI, Anthropic (via CORS proxy), or any OpenAI-compatible endpoint
+- **AI:** Bring-your-own LLM — Gemini, OpenAI, Anthropic (via CORS proxy), or any OpenAI-compatible endpoint.
+  Nothing LLM-related is deployed with the app; see [Bring Your Own LLM](#bring-your-own-llm)
 
 ## Logging
 Client events are posted to `/api/logs`, which nginx proxies to a small **log sink**
@@ -50,7 +54,17 @@ Each line carries a per-tab `sessionId` and the signed-in user's opaque Google a
 token before writing, caps event and field sizes, and drops requests over 64 KB.
 
 Logging is best effort: if the sink is unreachable the client retries a few times, then stops
-for that session. The app itself is unaffected, and Settings → Diagnostics reports the state.
+for that session. The app itself is unaffected.
+
+**Log level**
+`LOG_LEVEL` (`debug`, `info`, `warn` or `error`; default `info`) is read when the containers
+start, so changing it needs a container recreate, not a rebuild. It applies to both sides:
+- the log sink drops anything below it
+- the browser client gets it from `/config.js`, which nginx renders from the container
+  environment at startup; events below the level are neither printed nor shipped
+
+It is deployment configuration only — there is no in-app switch. `npm run dev` always logs at
+`debug`.
 
 CI gates on this: the pipeline waits for the `logger` container to report healthy and POSTs a
 `ci.smoke` event through nginx, so a broken sink fails the build instead of crash-looping in
@@ -76,7 +90,7 @@ src/
     applications/  table, form, filters, badges
     storage/       spreadsheet picker, setup screen, sheet-creation prompt
     sync/          sync indicator + settings card
-    settings/      account, AI provider, timezone, diagnostics
+    settings/      account, AI provider, timezone
     routing/       auth gates and the spreadsheet gate
   providers/       React contexts (*-context.ts) and their providers (*-provider.tsx)
   services/        auth, storage, picker, and LLM integrations
@@ -99,21 +113,36 @@ OAuth client's authorized JavaScript origins must include it too.
 ## Troubleshooting
 The app surfaces Google's actual error text rather than failing silently:
 - **Applications will not load** — the page shows the API error with a Retry button.
-- **Settings → Diagnostics → Run checks** reports whether the key is present, the gapi client
-  and Picker module loaded, the Sheets discovery document resolved, and whether an access token
-  is installed. A missing Picker module almost always means the Picker API is not enabled.
-- **Settings → Diagnostics → Enable verbose logging** sets `localStorage["jat:debug"] = "1"`, which
-  turns on `[storage]`, `[sync]`, `[sheets]`, `[picker]`, `[auth]` and `[llm]` debug output.
-  Warnings and errors are always logged, in every build.
+- A missing Picker dialog almost always means the Google Picker API is not enabled.
+- For more detail, redeploy with `LOG_LEVEL=debug`, which turns on `[storage]`, `[sync]`,
+  `[sheets]`, `[picker]`, `[auth]` and `[llm]` debug output. Warnings and errors are always logged
+  unless the level is raised above them.
 
-## Local Hosting
-This application allows you to bring your own LLM rather than use one of the large providers. LM Studio seems to be the frontrunner tool for this sort of application.
+## Bring Your Own LLM
+The app does not ship or deploy a model. Each user picks a provider in
+**Settings → AI Provider** and the browser talks to it directly:
 
-To configure it, do the following
-1. Configure LM Studio, download a suitable chat focused LLM.
-2. Set up a web search solution so that your model can visit webpages. There are some integrations into LM Studio.
-3. In the server tab, load your model and start the server. Make sure to enable CORS (disabled by default).
-4. Adjust LLM settings. For example the application is sending structured output format, but that can be configured in LM Studio (Server > Inference > Structured Output). Also, you can set context length, which I set to 7777 for testing (Server > Load > Context And Offload > Context Length). There were issues with the defaults of 2k and 4k.
+| Provider | Needs |
+| --- | --- |
+| Google Gemini | API key |
+| OpenAI | API key; optional base URL for OpenAI-compatible hosts |
+| Anthropic | API key and a CORS proxy base URL |
+| Self-hosted (OpenAI-compatible) | full chat completions URL, e.g. `http://localhost:1234/v1/chat/completions` |
+
+**Discover** asks the provider's model-listing endpoint (`GET /models`) which models the key or
+server can use and turns the Model field into a picker. For LM Studio it also shows whether each
+model is loaded or only downloaded. **Enter a model name manually…** switches back to free text.
+
+Every AI request is a fresh single-turn chat: the system prompt from
+`src/prompts/extract-job-posting.md` plus one user message holding the pasted posting, with runs
+of whitespace collapsed first. No conversation history is kept or resent.
+
+### Self-hosting with LM Studio
+1. Download a chat-focused model in LM Studio.
+2. In the server tab, load the model and start the server. Enable CORS (off by default).
+3. The app sends a JSON schema as structured output (Server > Inference > Structured Output).
+   Raise the context length if needed (Server > Load > Context And Offload > Context Length) —
+   the 2k and 4k defaults were too small for long postings.
 
 ## Running (Local)
 ```bash

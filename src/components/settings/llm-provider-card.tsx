@@ -5,7 +5,9 @@ import {
   DEFAULT_MODELS,
   type LLMProvider,
   type LLMConfig,
+  type LLMModel,
 } from "../../types/llm";
+import { createLLMService } from "../../services/llm/llm-service";
 import {
   getLLMConfig,
   saveLLMConfig,
@@ -16,6 +18,9 @@ import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import { TitledCard } from "../ui/card";
 import { Field, inputClass } from "../ui/field";
+
+/** Select value that switches the model picker back to free text. */
+const MANUAL_ENTRY = "__manual__";
 
 const CUSTOM_ENDPOINT_PLACEHOLDER = "http://localhost:1234/v1/chat/completions";
 
@@ -36,7 +41,7 @@ const BASE_URL_HELP: Partial<
   custom: {
     label: "Chat Endpoint URL",
     placeholder: CUSTOM_ENDPOINT_PLACEHOLDER,
-    hint: "Full URL to the chat completions endpoint on your server (e.g. LM Studio, Ollama, vLLM).",
+    hint: "Full URL to the chat completions endpoint on your server (e.g. LM Studio, vLLM, llama.cpp).",
   },
 };
 
@@ -58,6 +63,9 @@ export function LLMProviderCard() {
   });
   const [configured, setConfigured] = useState(() => getLLMConfig() !== null);
   const { saved, flash } = useSavedFlash();
+  const [models, setModels] = useState<LLMModel[] | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
 
   const { provider, apiKey, model, baseUrl } = config;
   const isCustom = provider === "custom";
@@ -68,6 +76,46 @@ export function LLMProviderCard() {
     model.trim().length > 0 &&
     (isCustom || apiKey.trim().length > 0) &&
     (!baseUrlRequired || baseUrl.trim().length > 0);
+
+  // Listing needs the same credentials a request would, minus the model
+  const canDiscover =
+    (isCustom || apiKey.trim().length > 0) &&
+    (!baseUrlRequired || baseUrl.trim().length > 0);
+
+  const resetDiscovery = () => {
+    setModels(null);
+    setDiscoveryError(null);
+  };
+
+  /** Ask the provider which models it offers, using the unsaved form values. */
+  const handleDiscover = async () => {
+    setDiscovering(true);
+    setDiscoveryError(null);
+    try {
+      const found = await createLLMService({
+        provider,
+        apiKey,
+        model,
+        ...(baseUrl && { baseUrl }),
+      }).listModels();
+      if (found.length === 0) {
+        setModels(null);
+        setDiscoveryError("The provider reported no models.");
+        return;
+      }
+      setModels(found);
+      // Nothing chosen yet (self-hosted starts blank): take the first loaded one
+      if (!model.trim()) {
+        const pick = found.find((m) => m.detail === "loaded") ?? found[0]!;
+        setConfig((prev) => ({ ...prev, model: pick.id }));
+      }
+    } catch (err) {
+      setModels(null);
+      setDiscoveryError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDiscovering(false);
+    }
+  };
 
   const handleSave = () => {
     const next: LLMConfig = {
@@ -85,6 +133,7 @@ export function LLMProviderCard() {
     clearLLMConfig();
     setConfig(blankForm("gemini"));
     setConfigured(false);
+    resetDiscovery();
   };
 
   return (
@@ -99,7 +148,10 @@ export function LLMProviderCard() {
         <Field label="Provider">
           <select
             value={provider}
-            onChange={(e) => setConfig(blankForm(e.target.value as LLMProvider))}
+            onChange={(e) => {
+              setConfig(blankForm(e.target.value as LLMProvider));
+              resetDiscovery();
+            }}
             className={inputClass}
           >
             {LLM_PROVIDERS.map((option) => (
@@ -123,20 +175,6 @@ export function LLMProviderCard() {
             />
           </Field>
         )}
-
-        <Field label="Model">
-          <input
-            type="text"
-            value={model}
-            onChange={(e) =>
-              setConfig((prev) => ({ ...prev, model: e.target.value }))
-            }
-            placeholder={
-              isCustom ? "Model name loaded on your server" : undefined
-            }
-            className={inputClass}
-          />
-        </Field>
 
         {baseUrlHelp && (
           <Field
@@ -163,6 +201,61 @@ export function LLMProviderCard() {
             />
           </Field>
         )}
+
+        <Field
+          label="Model"
+          error={discoveryError ?? undefined}
+          hint={
+            models
+              ? `${models.length} model${models.length === 1 ? "" : "s"} available from ${PROVIDER_LABELS[provider]}.`
+              : "Use Discover to list the models your key or server can use."
+          }
+        >
+          <div className="flex gap-2">
+            {models ? (
+              <select
+                value={model}
+                onChange={(e) => {
+                  if (e.target.value === MANUAL_ENTRY) setModels(null);
+                  else setConfig((prev) => ({ ...prev, model: e.target.value }));
+                }}
+                className={inputClass}
+              >
+                {/* Keep a saved model selectable even if the list lacks it */}
+                {model && !models.some((m) => m.id === model) && (
+                  <option value={model}>{model} (not listed)</option>
+                )}
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label && m.label !== m.id ? `${m.label} (${m.id})` : m.id}
+                    {m.detail ? ` — ${m.detail}` : ""}
+                  </option>
+                ))}
+                <option value={MANUAL_ENTRY}>Enter a model name manually…</option>
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={model}
+                onChange={(e) =>
+                  setConfig((prev) => ({ ...prev, model: e.target.value }))
+                }
+                placeholder={
+                  isCustom ? "Model name loaded on your server" : undefined
+                }
+                className={inputClass}
+              />
+            )}
+            <Button
+              variant="secondary"
+              onClick={handleDiscover}
+              disabled={!canDiscover || discovering}
+              className="whitespace-nowrap"
+            >
+              {discovering ? "Loading…" : models ? "Refresh" : "Discover"}
+            </Button>
+          </div>
+        </Field>
 
         {saved && <p className="text-sm text-green-600">Saved!</p>}
 
