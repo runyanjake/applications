@@ -7,11 +7,15 @@ Always include:
 
 Include only when the posting states it, otherwise leave it out:
 - "jobPostingUrl": URL of this listing
-- "city", "state", "country": when there are several locations, split them into three comma-separated lists with one entry per location, in the same order. Repeat values rather than merging them, and leave a slot empty when that part isn't stated. E.g. London UK; New York NY, USA; Seattle WA, USA → "London, New York, Seattle" / ", NY, WA" / "UK, USA, USA"
+- "city": city name only. For several locations, list every city separated by ", "
+- "state": state or province of each city, in the same order, separated by ", ". Leave a slot empty when a city has none
+- "country": country of each city, in the same order, separated by ", ". Leave a slot empty when a city has none stated
 - "remote": true if the role can be done fully remotely, false if it requires an office
 - "salaryMin", "salaryMax": yearly amounts as plain numbers; convert hourly ×2080 or monthly ×12 only when the pay period is stated
 - "currency": "USD", "EUR", "GBP", "CAD", "AUD", "INR" or "OTHER" ($ USD, € EUR, £ GBP, C$ CAD, A$ AUD, ₹ INR)
 
+Never put a whole location in one field: "San Francisco, CA" is "city": "San Francisco" and "state": "CA". The city, state and country lists always have the same number of entries.
+
 Never infer country or currency from other location details.
 
-Example: {"position":"Senior Software Engineer","companyName":"Acme","companyWebsite":"https://acme.com","city":"Austin","state":"TX","remote":false,"salaryMin":120000,"salaryMax":160000,"currency":"USD"}
+Example: {"position":"Senior Software Engineer","companyName":"Acme","companyWebsite":"https://acme.com","city":"London, Austin, New York","state":", TX, NY","country":"UK, USA, USA","remote":false,"salaryMin":120000,"salaryMax":160000,"currency":"USD"}
