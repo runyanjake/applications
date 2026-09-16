@@ -5,46 +5,61 @@ import { parseExtractedJSON } from "./llm-service";
 import { getJson, postJson, requireText, sortModels } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
-const OPTIONAL_STRING = { type: ["string", "null"] };
+const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "INR", "OTHER"];
+
+/** The keys the prompt asks for, and nothing else. */
+const FIELDS: Record<string, { type: string; enum?: string[] }> = {
+  position: { type: "string" },
+  companyName: { type: "string" },
+  companyWebsite: { type: "string" },
+  jobPostingUrl: { type: "string" },
+  city: { type: "string" },
+  state: { type: "string" },
+  country: { type: "string" },
+  remote: { type: "boolean" },
+  salaryMin: { type: "number" },
+  salaryMax: { type: "number" },
+  currency: { type: "string", enum: CURRENCIES },
+  notes: { type: "string" },
+};
+
+const ALWAYS_PRESENT = ["position", "companyName", "companyWebsite", "notes"];
 
 /**
- * Structured-output schema. Strict mode requires every key to be listed as
- * required, so fields the prompt treats as optional are nullable instead;
- * parseExtractedJSON drops the nulls. Ignored by servers without support.
+ * Structured-output schema; it is what actually stops a model inventing keys.
+ *
+ * OpenAI's strict mode requires every key to be required, so optional fields
+ * become nullable there (parseExtractedJSON drops the nulls). Local servers
+ * get the plain-typed form that is known to work: after switching them to
+ * `type: [..., "null"]`, LM Studio returned unconstrained output with invented
+ * keys, so the nullable form was evidently not being enforced there.
  */
-const RESPONSE_FORMAT = {
-  type: "json_schema",
-  json_schema: {
-    name: "job_posting_extraction",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        position: OPTIONAL_STRING,
-        companyName: OPTIONAL_STRING,
-        companyWebsite: OPTIONAL_STRING,
-        jobPostingUrl: OPTIONAL_STRING,
-        city: OPTIONAL_STRING,
-        state: OPTIONAL_STRING,
-        country: OPTIONAL_STRING,
-        remote: { type: ["boolean", "null"] },
-        salaryMin: { type: ["number", "null"] },
-        salaryMax: { type: ["number", "null"] },
-        currency: {
-          type: ["string", "null"],
-          enum: ["USD", "EUR", "GBP", "CAD", "AUD", "INR", "OTHER", null],
-        },
-        notes: { type: "string" },
+function responseFormat(selfHosted: boolean) {
+  const properties = Object.fromEntries(
+    Object.entries(FIELDS).map(([key, field]) => [
+      key,
+      selfHosted || ALWAYS_PRESENT.includes(key)
+        ? field
+        : {
+            type: [field.type, "null"],
+            ...(field.enum && { enum: [...field.enum, null] }),
+          },
+    ]),
+  );
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "job_posting_extraction",
+      strict: true,
+      schema: {
+        type: "object",
+        properties,
+        required: selfHosted ? ALWAYS_PRESENT : Object.keys(FIELDS),
+        additionalProperties: false,
       },
-      required: [
-        "position", "companyName", "companyWebsite", "jobPostingUrl", "city",
-        "state", "country", "remote", "salaryMin", "salaryMax", "currency",
-        "notes",
-      ],
-      additionalProperties: false,
     },
-  },
-};
+  };
+}
 
 /** OpenAI's list includes image, audio, embedding and moderation models. */
 const NON_CHAT_MODEL =
@@ -104,7 +119,7 @@ export class OpenAILLMService implements LLMService {
           },
           { role: "user", content: input },
         ],
-        response_format: RESPONSE_FORMAT,
+        response_format: responseFormat(this.selfHosted),
         // api.openai.com rejects unknown parameters, and its reasoning models
         // reject a non-default temperature — keep these to local servers
         ...(this.selfHosted && { temperature: 0, enable_thinking: false }),
