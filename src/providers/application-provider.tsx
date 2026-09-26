@@ -13,7 +13,7 @@ import type {
 } from "../types/application";
 import { useStorage } from "../hooks/use-storage";
 import { useAuth } from "../hooks/use-auth";
-import { setGapiAccessToken } from "../services/auth/gapi-token";
+import { setGoogleAccessToken } from "../services/auth/access-token";
 import { generateId } from "../utils/id";
 import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
 import { describeGoogleError, isAuthError } from "../utils/google-error";
@@ -129,9 +129,9 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     isLoadingRef.current = true;
     setLoadError(null);
     try {
-      // gapi holds its own token copy; effects run child-first, so the
-      // AuthProvider above may not have installed it yet.
-      setGapiAccessToken(accessToken);
+      // The Sheets service reads a module-level token; effects run child-first,
+      // so the AuthProvider above may not have installed it yet.
+      setGoogleAccessToken(accessToken);
       const apps = await storageService.getAll();
       setApplications(apps);
       sessionSet(SESSION_KEY, apps);

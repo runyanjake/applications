@@ -1,12 +1,33 @@
+interface RequestInitJson {
+  method: string;
+  headers: Record<string, string>;
+  body?: string;
+}
+
+/**
+ * Send the request from the renderer, or in Electron via the main process so it
+ * bypasses the page CSP and CORS. Normalized to what requestJson needs.
+ */
+async function send(
+  url: string,
+  init: RequestInitJson,
+): Promise<{ ok: boolean; status: number; text(): Promise<string> }> {
+  if (window.electronAPI) {
+    const res = await window.electronAPI.llm.request({ url, ...init });
+    return { ok: res.ok, status: res.status, text: async () => res.body };
+  }
+  return fetch(url, init);
+}
+
 /** Shared request plumbing for the LLM providers. */
 async function requestJson<T>(
   provider: string,
   url: string,
-  init: RequestInit,
+  init: RequestInitJson,
 ): Promise<T> {
-  let response: Response;
+  let response: Awaited<ReturnType<typeof send>>;
   try {
-    response = await fetch(url, init);
+    response = await send(url, init);
   } catch (err) {
     // fetch only rejects on network/CORS failures, which are the common
     // self-hosted misconfiguration — say so rather than "Failed to fetch".
@@ -22,7 +43,7 @@ async function requestJson<T>(
     const detail = await response.text().catch(() => "");
     throw new Error(`${provider} API error (${response.status}): ${detail}`);
   }
-  return (await response.json()) as T;
+  return JSON.parse(await response.text()) as T;
 }
 
 export function postJson<T>(

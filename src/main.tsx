@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, HashRouter } from "react-router-dom";
 import { AuthProvider } from "./providers/auth-provider";
 import { StorageProvider } from "./providers/storage-provider";
 import { ApplicationProvider } from "./providers/application-provider";
@@ -22,9 +22,12 @@ window.addEventListener("unhandledrejection", (event) => {
   log.error("Unhandled promise rejection:", event.reason);
 });
 
+// Use HashRouter in Electron (file:// protocol doesn't support BrowserRouter)
+const Router = window.electronAPI ? HashRouter : BrowserRouter;
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
+    <Router>
       <GoogleApiGate>
         <AuthProvider>
           <StorageProvider>
@@ -34,6 +37,6 @@ createRoot(document.getElementById("root")!).render(
           </StorageProvider>
         </AuthProvider>
       </GoogleApiGate>
-    </BrowserRouter>
+    </Router>
   </StrictMode>,
 );

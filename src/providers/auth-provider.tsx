@@ -8,7 +8,7 @@ import {
 } from "react";
 import type { AuthState, AuthTokens, AuthUser } from "../types/auth";
 import { createAuthService } from "../services/auth/auth-service";
-import { setGapiAccessToken } from "../services/auth/gapi-token";
+import { setGoogleAccessToken } from "../services/auth/access-token";
 import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
 import { createLogger } from "../utils/logger";
 import { setLogUser } from "../utils/log-transport";
@@ -32,6 +32,11 @@ const SIGNED_OUT: AuthState = {
 
 /** Restore a session, ignoring tokens too close to expiry to be usable. */
 function restoreSession(): AuthState {
+  // In Electron, we restore asynchronously after mount
+  if (window.electronAPI) {
+    return { ...SIGNED_OUT, isLoading: true };
+  }
+  // Web: use sessionStorage
   const user = sessionGet<AuthUser>(SESSION_KEY_USER);
   const tokens = sessionGet<AuthTokens>(SESSION_KEY_TOKENS);
   const isValid = tokens != null && tokens.expiresAt - Date.now() > MIN_REFRESH_DELAY_MS;
@@ -55,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLogUser(null);
     sessionRemove(SESSION_KEY_USER);
     sessionRemove(SESSION_KEY_TOKENS);
-    setGapiAccessToken(null);
+    setGoogleAccessToken(null);
     setState(SIGNED_OUT);
   }, []);
 
@@ -83,12 +88,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!state.tokens || !state.isAuthenticated) return;
-    setGapiAccessToken(state.tokens.accessToken);
+    setGoogleAccessToken(state.tokens.accessToken);
     scheduleRefresh(state.tokens);
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
   }, [state.tokens, state.isAuthenticated, scheduleRefresh]);
+
+  // Restore session from Electron's secure storage on mount
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    window.electronAPI.auth.getStoredSession().then((session) => {
+      if (session && session.tokens.expiresAt > Date.now() + MIN_REFRESH_DELAY_MS) {
+        setGoogleAccessToken(session.tokens.accessToken);
+        setState({
+          user: session.user,
+          tokens: session.tokens,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        scheduleRefresh(session.tokens);
+        log.info("Restored session from secure storage");
+      } else {
+        setState(SIGNED_OUT);
+        log.info("No valid session in secure storage");
+      }
+    }).catch((err) => {
+      log.error("Failed to restore session from secure storage:", err);
+      setState(SIGNED_OUT);
+    });
+  }, [scheduleRefresh]);
 
   const login = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true }));

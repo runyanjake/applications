@@ -35,7 +35,7 @@ export function SpreadsheetSetup() {
       {!pendingSheetCreation && (
         <Button size="lg" onClick={pickSpreadsheet} disabled={isPicking}>
           {isPicking
-            ? "Opening picker..."
+            ? "Choosing..."
             : error
               ? "Try Another Spreadsheet"
               : "Select Spreadsheet"}

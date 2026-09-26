@@ -68,6 +68,20 @@ function flush(useBeacon = false): void {
   const batch = queue.slice(0, MAX_BATCH);
   queue = queue.slice(batch.length);
 
+  // Use Electron IPC if available
+  if (window.electronAPI) {
+    window.electronAPI.log.write(
+      batch.map((e) => ({
+        ...e,
+        sessionId: sessionId(),
+        userId: userId ?? undefined,
+      }))
+    );
+    if (queue.length > 0) scheduleFlush();
+    return;
+  }
+
+  // Web: HTTP transport
   const body = payload(batch);
 
   // On page hide only sendBeacon is guaranteed to complete

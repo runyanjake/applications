@@ -45,53 +45,6 @@ declare global {
               ontimeout?: () => void;
             },
       ): void;
-      client: {
-        init(config: {
-          apiKey: string;
-          discoveryDocs: string[];
-        }): Promise<void>;
-        getToken(): { access_token: string } | null;
-        setToken(token: { access_token: string } | null): void;
-        sheets: {
-          spreadsheets: {
-            values: {
-              get(params: {
-                spreadsheetId: string;
-                range: string;
-              }): Promise<{ result: { values?: string[][] } }>;
-              append(params: {
-                spreadsheetId: string;
-                range: string;
-                valueInputOption: string;
-                resource: { values: string[][] };
-              }): Promise<unknown>;
-              update(params: {
-                spreadsheetId: string;
-                range: string;
-                valueInputOption: string;
-                resource: { values: string[][] };
-              }): Promise<unknown>;
-            };
-            get(params: {
-              spreadsheetId: string;
-            }): Promise<{
-              result: {
-                sheets?: Array<{
-                  properties?: {
-                    sheetId?: number;
-                    title?: string;
-                    gridProperties?: { rowCount?: number; columnCount?: number };
-                  };
-                }>;
-              };
-            }>;
-            batchUpdate(params: {
-              spreadsheetId: string;
-              resource: { requests: unknown[] };
-            }): Promise<unknown>;
-          };
-        };
-      };
     };
     google: {
       accounts: {

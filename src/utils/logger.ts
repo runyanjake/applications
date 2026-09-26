@@ -74,6 +74,7 @@ function emit(
 
 export interface Logger {
   debug(...args: unknown[]): void;
+  info(...args: unknown[]): void;
   warn(...args: unknown[]): void;
   error(...args: unknown[]): void;
   /** Records a named business event (CRUD and other significant actions). */
@@ -86,6 +87,10 @@ export function createLogger(scope: string): Logger {
     debug: (...args) => {
       if (enabled("debug")) console.debug(prefix, ...args);
       emit(scope, "debug", args);
+    },
+    info: (...args) => {
+      if (enabled("info")) console.info(prefix, ...args);
+      emit(scope, "info", args);
     },
     warn: (...args) => {
       if (enabled("warn")) console.warn(prefix, ...args);

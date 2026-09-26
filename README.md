@@ -1,93 +1,152 @@
 # Applications
-A bring-your-own-data, bring-your-own-LLM job application tracker backed by your own Google Sheet.
-
-## LM Studio Configuration
-Self-hosted models are called straight from the browser. Nothing LLM-related is deployed with the app.
-
-1. **Load the model:** in the **Developer** tab, load a chat model (7B+; smaller models often can't do structured output). In its load settings, set **Context Length** to 8192 or more, because the 2k/4k defaults cut off long postings. From the CLI: `lms load <model> --context-length 8192`.
-2. **Start the server:** in the server settings, turn on **Enable CORS** and start the server.
-3. **Connect the app:** in **Settings → AI Provider**, pick **Self-hosted (OpenAI-compatible)**, set the URL to `http://localhost:1234/v1/chat/completions`, then click **Discover** and pick the model.
-4. **Leave the app's Structured Output toggle off.** The JSON schema is sent with every request as `response_format`.
-5. **Check that the schema is enforced.** Run the command below. It should return `{"title": ...}`, not a poem:
-   ```bash
-   curl http://localhost:1234/v1/chat/completions -H "Content-Type: application/json" -d '{
-     "model": "<model id>",
-     "messages": [{"role": "user", "content": "Write a poem about the sea."}],
-     "response_format": {"type": "json_schema", "json_schema": {"name": "test", "strict": true,
-       "schema": {"type": "object", "properties": {"title": {"type": "string"}},
-                  "required": ["title"], "additionalProperties": false}}}}'
-   ```
+A bring-your-own-data, bring-your-own-LLM job application tracker backed by your own Google Sheet—now as a native desktop app.
 
 ## Key Features
-- **Applications in your Google Sheet:** track applications, with status history stored in your own spreadsheet.
-- **AI auto-fill:** fill the form from a pasted job posting with Gemini, OpenAI, Anthropic (via a CORS proxy) or any OpenAI-compatible server, with model discovery from the provider.
-- **Analytics:** status and company breakdowns, a draggable pipeline Sankey, and a status timeline grouped by day, week or month.
+- **Applications in your Google Sheet:** track applications with status history stored in your own spreadsheet.
+- **AI auto-fill:** fill the form from a pasted job posting with Gemini, OpenAI, Anthropic, or any OpenAI-compatible server (including local LLMs via LM Studio).
+- **Analytics:** status and company breakdowns, a draggable pipeline Sankey, and a status timeline grouped by day, week, or month.
 - **Printable report** for any date range.
-- **Server-side logging:** client logs are written to daily-rotated files by a log-sink container.
+- **Desktop-native:** runs as an Electron app with secure local token storage and file-based logging.
 
 ## System Design
 ```mermaid
 flowchart LR
-  user["Browser (React SPA)"]
-  subgraph host["Docker host"]
-    traefik["Traefik"]
-    app["applications<br/>nginx: SPA, /config.js, /api/logs proxy"]
-    logger["applications-logger<br/>Node + winston"]
-    logs[("LOG_DIR<br/>daily JSON logs")]
+  subgraph electron["Electron App"]
+    main["Main Process<br/>(Node.js)"]
+    renderer["Renderer Process<br/>(React SPA)"]
+    preload["Preload Scripts<br/>(contextBridge)"]
   end
-  google["Google OAuth, Sheets,<br/>Drive, Picker APIs"]
-  llm["LLM provider<br/>Gemini / OpenAI / Anthropic / LM Studio"]
+  subgraph local["Local Storage"]
+    tokens[("Encrypted Tokens<br/>(safeStorage)")]
+    logs[("Log Files<br/>(daily rotation)")]
+    config[("Spreadsheet Config")]
+  end
+  google["Google OAuth, Sheets,<br/>Drive APIs"]
+  llm["LLM Provider<br/>Gemini / OpenAI / Anthropic / LM Studio"]
+  browser["System Browser"]
 
-  user -->|HTTPS| traefik --> app
-  app -->|/api/logs| logger --> logs
-  user -->|"read/write sheet"| google
-  user -->|"extract posting"| llm
+  renderer <-->|IPC| preload <-->|IPC| main
+  main --> tokens
+  main --> logs
+  main --> config
+  main -->|OAuth loopback| browser -->|auth code| main
+  renderer -->|"fetch (REST)"| google
+  main -->|"fetch (proxied via IPC)"| llm
 ```
-Details on logging, LLM requests and the time series are in [`.claude/DESIGN.md`](.claude/DESIGN.md).
+Details on architecture and data flow are in [`.claude/DESIGN.md`](.claude/DESIGN.md).
 
 ## Local Dev Prerequisites
 - Node.js >= 22 and npm
-- Docker Compose >= 2.0 (production only)
-- A Google Cloud project with the **Sheets**, **Drive** and **Picker** APIs enabled, an OAuth client ID and an API key. If the key has referrer restrictions, the app's origin must be allowed, and it must also be listed as an authorized JavaScript origin on the OAuth client.
-
-Install dependencies with `npm install`, plus `npm --prefix server install` for the log sink.
+- A Google Cloud project with the **Sheets** and **Drive** APIs enabled
+- OAuth credentials:
+  - **Desktop app:** OAuth 2.0 Client ID of type "Desktop app" (includes client secret)
+  - **API Key:** only for the browser build, which uses the Google Picker (also enable the **Picker** API)
+  - **OAuth consent screen** with your account added as a test user
 
 ## Configuration & Environment Variables
-Set these in `.env` (copy it from `.env.example`).
 
-| Variable | Default | Notes |
+### Electron Desktop App
+Set these in `.env` (template: [`.env.electron.example`](.env.electron.example)). electron-vite inlines them into the build, so **rebuild or restart `npm run dev` after changing them**. Because the client secret ends up in `out/` and `dist/`, both are gitignored.
+
+| Variable | Required | Notes |
 | --- | --- | --- |
-| `VITE_GOOGLE_CLIENT_ID` | — | **Required.** Baked into the bundle at build time |
-| `VITE_GOOGLE_API_KEY` | — | **Required.** Baked into the bundle at build time |
-| `DOMAIN` | `apply.whitney.rip` | Traefik host rule |
-| `LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error`. Read at container start by both the client (via `/config.js`) and the sink |
-| `LOG_DIR` | `/pwspool/software/applications/logs` | Host directory for log files |
-| `LOG_RETENTION` | `30d` | Log files older than this are deleted |
-| `LOG_ROTATE_FREQUENCY` | `1d` | How often a new log file is started |
-| `LOG_CONSOLE_FORMAT` | `pretty` | `json` when a collector reads `docker logs` |
+| `MAIN_VITE_GOOGLE_CLIENT_ID` | Yes | Desktop OAuth Client ID |
+| `MAIN_VITE_GOOGLE_CLIENT_SECRET` | Yes | Desktop OAuth Client Secret |
+
+### Web Development (Optional)
+For browser-based development without Electron, set these in `.env`:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `VITE_GOOGLE_CLIENT_ID` | Yes | Web OAuth Client ID |
+| `VITE_GOOGLE_API_KEY` | Yes | API key for the Google Picker |
+
+## LM Studio Configuration
+Self-hosted models are called from the app's main process. Nothing LLM-related is bundled with the application.
+
+1. **Load the model:** in LM Studio's **Developer** tab, load a chat model (7B+). Set **Context Length** to 8192 or more. From CLI: `lms load <model> --context-length 8192`.
+2. **Start the server:** start the server. **Enable CORS** is only needed for the browser build (`npm run dev:web`); the desktop app sends requests from the main process, where CORS doesn't apply.
+3. **Connect the app:** in **Settings → AI Provider**, pick **Self-hosted (OpenAI-compatible)**, set URL to `http://localhost:1234/v1/chat/completions`, click **Discover**, and select the model.
+4. **Leave Structured Output toggle off.** The JSON schema is sent with every request as `response_format`.
 
 ## Operational Runbook
+
+### Initial Setup
 ```bash
-# Local setup & development (http://127.0.0.1:5173)
+# Clone and install dependencies
 git clone git@github.com:runyanjake/applications.git && cd applications
-cp .env.example .env            # fill in the Google credentials
 npm install
+```
+
+### GCP OAuth Setup
+1. **APIs & Services → Library:** enable the **Google Sheets API** and **Google Drive API** (plus the **Google Picker API** for the browser build).
+2. **Google Auth Platform → Branding / Audience / Data Access:**
+   - **User type:** External (or Internal on Workspace).
+   - **Scopes:** `userinfo.email`, `userinfo.profile`, `.../auth/spreadsheets`, `.../auth/drive.readonly`.
+   - **Test users:** add your Google account.
+   - While the app is in **Testing**, refresh tokens expire after 7 days, so expect to sign in weekly. **Publish app** (unverified, with a warning screen and a 100-user cap) removes that limit.
+3. **Clients → Create client:** type **Desktop app**. No redirect URIs are needed, because desktop clients accept any `http://127.0.0.1` loopback port (the app uses `8085`). Copy the Client ID and Client Secret.
+4. **Browser build only — Credentials → Create credentials → API key:** restrict it to the Picker API. The desktop app doesn't use an API key: it lists spreadsheets from the Drive API in its own dialog, because the Google Picker can't sign in inside an Electron window.
+
+### Development
+```bash
+# Configure credentials (see Configuration above)
+cp .env.electron.example .env   # or merge into an existing .env
+
+# Start Electron in development mode (hot reload for the renderer;
+# restart after changing main/preload code or .env)
 npm run dev
-npm --prefix server install && npm run logs   # optional, second shell: log sink writing ./logs
 
-# Linting & type-checking (no test suite yet)
+# Or run in browser only (requires web OAuth client in .env)
+cp .env.example .env   # fill in VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY
+npm run dev:web
+```
+
+### Linting & Type Checking
+```bash
 npm run lint
-npx tsc -b
+npm run typecheck
+```
 
-# Production build & run (Jenkins runs the same steps, then health and smoke checks)
-sudo mkdir -p /pwspool/software/applications/logs
-docker build --target ci -t applications-ci .
-docker compose up -d --build
+### Building
+```bash
+# Compile main, preload and renderer into out/
+npm run build
 
-# Common operations
-docker logs -f applications-logger                                         # live log stream
-tail -f /pwspool/software/applications/logs/applications-$(date -u +%F).log
-jq -c 'select(.level == "error")' /pwspool/software/applications/logs/*.log
-LOG_LEVEL=debug docker compose up -d                                        # change level, no rebuild
-docker compose down
+# Run the compiled build without packaging
+npm run start
+
+# Package for distribution (output in dist/)
+npm run package           # current platform
+npm run package:mac       # macOS (.dmg, .zip)
+npm run package:win       # Windows (.exe, portable)
+npm run package:linux     # Linux (.AppImage, .deb)
+```
+
+### Installing / Running the Packaged App (macOS)
+```bash
+# Run directly from the build output
+open "dist/mac-arm64/Job Application Tracker.app"
+
+# Or install: open the .dmg and drag the app to Applications
+open dist/Job\ Application\ Tracker-*-arm64.dmg
+```
+The app is unsigned. Builds you make locally run without a Gatekeeper prompt. A copy downloaded or transferred from elsewhere must be opened once via right-click → **Open**. On first sign-in, macOS may ask for Keychain access; this is `safeStorage` encrypting the stored tokens.
+
+### Common Operations
+```bash
+# View application logs (macOS)
+tail -f ~/Library/Application\ Support/job-application-tracker/logs/app-$(date +%F).log
+
+# View application logs (Linux)
+tail -f ~/.config/job-application-tracker/logs/app-$(date +%F).log
+
+# Clear stored credentials (macOS)
+rm -rf ~/Library/Application\ Support/job-application-tracker/secure-data/
+
+# Clear stored credentials (Linux)
+rm -rf ~/.config/job-application-tracker/secure-data/
+
+# Filter error logs
+jq -c 'select(.level == "error")' ~/Library/Application\ Support/job-application-tracker/logs/*.log
 ```

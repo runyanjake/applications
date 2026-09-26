@@ -6,7 +6,7 @@ import type {
 } from "../../types/google";
 import { ENV } from "../../config/env";
 import { GOOGLE_SCOPES, USERINFO_ENDPOINT } from "../../config/google";
-import { setGapiAccessToken } from "./gapi-token";
+import { getGoogleAccessToken, setGoogleAccessToken } from "./access-token";
 import { createLogger } from "../../utils/logger";
 
 const log = createLogger("auth");
@@ -60,10 +60,10 @@ export class GoogleAuthService implements AuthService {
   }
 
   async logout(): Promise<void> {
-    const token = window.gapi.client.getToken();
+    const token = getGoogleAccessToken();
     if (token) {
-      window.google.accounts.oauth2.revoke(token.access_token);
-      setGapiAccessToken(null);
+      window.google.accounts.oauth2.revoke(token);
+      setGoogleAccessToken(null);
     }
   }
 
@@ -71,7 +71,7 @@ export class GoogleAuthService implements AuthService {
     return this.requestTokens("");
   }
 
-  /** Request a token, install it on the gapi client, and return it. */
+  /** Request a token, install it for the Sheets service, and return it. */
   private async requestTokens(prompt: string): Promise<AuthTokens> {
     const response = await new Promise<{
       access_token: string;
@@ -82,7 +82,7 @@ export class GoogleAuthService implements AuthService {
       this.ensureTokenClient().requestAccessToken({ prompt });
     });
 
-    setGapiAccessToken(response.access_token);
+    setGoogleAccessToken(response.access_token);
     return {
       accessToken: response.access_token,
       expiresAt: Date.now() + response.expires_in * 1000,

@@ -11,8 +11,11 @@ import {
 } from "../../utils/sheet-mapper";
 import { describeGoogleError } from "../../utils/google-error";
 import { createLogger } from "../../utils/logger";
+import { googleFetch } from "../google/google-fetch";
 
 const log = createLogger("sheets");
+
+const SHEETS_API_ROOT = "https://sheets.googleapis.com/v4/spreadsheets";
 
 /** Columns A..R, matching HEADER_ROW. */
 const LAST_COLUMN = "R";
@@ -57,12 +60,9 @@ export class GoogleSheetsService implements StorageService {
   }
 
   async createApplicationsSheet(): Promise<void> {
-    await window.gapi.client.sheets.spreadsheets.batchUpdate({
-      spreadsheetId: this.spreadsheetId,
-      resource: {
-        requests: [{ addSheet: { properties: { title: this.sheetName } } }],
-      },
-    });
+    await this.batchUpdate([
+      { addSheet: { properties: { title: this.sheetName } } },
+    ]);
   }
 
   async getAll(): Promise<Application[]> {
@@ -95,53 +95,68 @@ export class GoogleSheetsService implements StorageService {
     const totalRows = sheet?.gridProperties?.rowCount ?? 0;
     if (totalRows <= endRow) return;
 
-    await window.gapi.client.sheets.spreadsheets.batchUpdate({
-      spreadsheetId: this.spreadsheetId,
-      resource: {
-        requests: [
-          {
-            deleteDimension: {
-              range: {
-                sheetId,
-                dimension: "ROWS",
-                startIndex: endRow,
-                endIndex: totalRows,
-              },
-            },
+    await this.batchUpdate([
+      {
+        deleteDimension: {
+          range: {
+            sheetId,
+            dimension: "ROWS",
+            startIndex: endRow,
+            endIndex: totalRows,
           },
-        ],
+        },
       },
-    });
+    ]);
   }
 
   /** Look up a sheet's properties within the spreadsheet. */
   private async findSheet(
     predicate: (props: SheetProperties) => boolean,
   ): Promise<SheetProperties | null> {
-    const response = await window.gapi.client.sheets.spreadsheets.get({
-      spreadsheetId: this.spreadsheetId,
-    });
-    const match = (response.result.sheets ?? []).find((sheet) =>
+    const result = await this.request<{
+      sheets?: Array<{ properties?: SheetProperties }>;
+    }>("GET", "?fields=sheets.properties");
+    const match = (result.sheets ?? []).find((sheet) =>
       sheet.properties ? predicate(sheet.properties) : false,
     );
     return match?.properties ?? null;
   }
 
   private async readRange(range: string): Promise<string[][]> {
-    const response = await window.gapi.client.sheets.spreadsheets.values.get({
-      spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!${range}`,
-    });
-    return response.result.values ?? [];
+    const result = await this.request<{ values?: string[][] }>(
+      "GET",
+      `/values/${this.encodeRange(range)}`,
+    );
+    return result.values ?? [];
   }
 
   private async writeRange(range: string, values: string[][]): Promise<void> {
-    await window.gapi.client.sheets.spreadsheets.values.update({
-      spreadsheetId: this.spreadsheetId,
-      range: `${this.sheetName}!${range}`,
-      valueInputOption: "RAW",
-      resource: { values },
-    });
+    await this.request(
+      "PUT",
+      `/values/${this.encodeRange(range)}?valueInputOption=RAW`,
+      { values },
+    );
+  }
+
+  private async batchUpdate(requests: unknown[]): Promise<void> {
+    await this.request("POST", ":batchUpdate", { requests });
+  }
+
+  private encodeRange(range: string): string {
+    return encodeURIComponent(`${this.sheetName}!${range}`);
+  }
+
+  /** Call the Sheets REST API for this spreadsheet. */
+  private request<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    return googleFetch<T>(
+      `${SHEETS_API_ROOT}/${encodeURIComponent(this.spreadsheetId)}${path}`,
+      method,
+      body,
+    );
   }
 
   /**
