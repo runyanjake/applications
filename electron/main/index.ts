@@ -4,6 +4,7 @@ import {
   ipcMain,
   IpcMainInvokeEvent,
   session,
+  shell,
 } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -54,6 +55,14 @@ const spreadsheetStoragePath = join(
   "spreadsheet.json"
 );
 
+/** http(s) only: other schemes could launch local apps or files. */
+function openInBrowser(url: string): void {
+  const { protocol } = new URL(url);
+  if (protocol === "http:" || protocol === "https:") {
+    void shell.openExternal(url);
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -64,6 +73,19 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  // Links open in the default browser, never in an app window
+  const { webContents } = mainWindow;
+  webContents.setWindowOpenHandler(({ url }) => {
+    openInBrowser(url);
+    return { action: "deny" };
+  });
+  webContents.on("will-navigate", (event, url) => {
+    if (new URL(url).origin !== new URL(webContents.getURL()).origin) {
+      event.preventDefault();
+      openInBrowser(url);
+    }
   });
 
   // Load the renderer
