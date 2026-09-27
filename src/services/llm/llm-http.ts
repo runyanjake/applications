@@ -14,11 +14,13 @@ async function requestJson<T>(
   try {
     response = await window.electronAPI.llm.request({ url, ...init });
   } catch (err) {
-    // Network failure. The query is dropped: it can carry an API key.
+    // Network failure or timeout. The query is dropped: it can carry an API key.
+    const endpoint = url.split("?")[0];
+    const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Could not reach the ${provider} endpoint at ${url.split("?")[0]}. Check the URL and that the server is running. (${
-        err instanceof Error ? err.message : String(err)
-      })`,
+      detail.includes("timed out")
+        ? `The ${provider} endpoint at ${endpoint} took too long to answer. A slow local model may be reasoning at length; turn thinking off or try a smaller model. (${detail})`
+        : `Could not reach the ${provider} endpoint at ${endpoint}. Check the URL and that the server is running. (${detail})`,
     );
   }
 

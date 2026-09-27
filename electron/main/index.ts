@@ -30,6 +30,8 @@ const GOOGLE_SCOPES = [
 
 const USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v3/userinfo";
 const OAUTH_REDIRECT_PORT = 8085;
+// Below undici's 300s headers timeout, which surfaces only as "fetch failed"
+const LLM_TIMEOUT_MS = 240_000;
 
 // Credentials are inlined from .env at build time (see env.d.ts)
 function getCredentials() {
@@ -249,16 +251,27 @@ function registerIpcHandlers(): void {
         throw new Error(`Unsupported protocol: ${protocol}`);
       }
 
-      const response = await fetch(req.url, {
-        method: req.method,
-        headers: req.headers,
-        body: req.body,
-      });
-      return {
-        ok: response.ok,
-        status: response.status,
-        body: await response.text(),
-      };
+      try {
+        const response = await fetch(req.url, {
+          method: req.method,
+          headers: req.headers,
+          body: req.body,
+          signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+        });
+        return {
+          ok: response.ok,
+          status: response.status,
+          body: await response.text(),
+        };
+      } catch (err) {
+        // IPC keeps only the message: fold in the timeout or network cause
+        if (err instanceof Error && err.name === "TimeoutError") {
+          throw new Error(`No response within ${LLM_TIMEOUT_MS / 1000}s (timed out)`);
+        }
+        const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+        const detail = cause?.code ?? cause?.message;
+        throw new Error(`${err instanceof Error ? err.message : String(err)}${detail ? ` (${detail})` : ""}`);
+      }
     }
   );
 

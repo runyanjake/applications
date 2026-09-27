@@ -1,7 +1,7 @@
 import type { ApplicationFormData } from "../../types/application";
 import type { LLMConfig, LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
-import { parseExtractedJSON } from "./llm-service";
+import { MAX_OUTPUT_TOKENS, parseExtractedJSON, postingMessage, truncatedError } from "./llm-service";
 import { getJson, postJson, requireText, sortModels } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
@@ -63,7 +63,10 @@ const NON_CHAT_MODEL =
   /embed|whisper|tts|dall-e|image|audio|realtime|transcribe|moderation|search|babbage|davinci/i;
 
 interface ChatCompletionResponse {
-  choices?: { message?: { content?: string; reasoning_content?: string } }[];
+  choices?: {
+    message?: { content?: string; reasoning_content?: string };
+    finish_reason?: string;
+  }[];
 }
 
 interface ModelList {
@@ -108,21 +111,25 @@ export class OpenAILLMService implements LLMService {
       {
         ...(this.model && { model: this.model }),
         messages: [
-          {
-            role: "system",
-            // "/no_think" is Qwen's soft switch; only local servers need it
-            content: this.selfHosted ? `/no_think\n${systemPrompt}` : systemPrompt,
-          },
-          { role: "user", content: input },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: postingMessage(input) },
         ],
         response_format: responseFormat(this.selfHosted),
-        // Local only: OpenAI rejects unknown params and non-default temperature on reasoning models
-        ...(this.selfHosted && { temperature: 0, enable_thinking: false }),
+        // Local only: OpenAI rejects unknown params and non-default temperature on reasoning models.
+        // reasoning_effort "none" disables thinking in LM Studio; vLLM/llama.cpp read chat_template_kwargs.
+        ...(this.selfHosted && {
+          temperature: 0,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          reasoning_effort: "none",
+          chat_template_kwargs: { enable_thinking: false },
+        }),
       },
       this.headers,
     );
 
-    const message = data.choices?.[0]?.message;
+    const choice = data.choices?.[0];
+    if (choice?.finish_reason === "length") throw truncatedError("OpenAI");
+    const message = choice?.message;
     const content = message?.content ?? "";
     const reasoning = message?.reasoning_content ?? "";
     // Reasoning models may answer in reasoning_content; use whichever holds the JSON

@@ -1,12 +1,13 @@
 import type { ApplicationFormData } from "../../types/application";
 import type { LLMConfig, LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
-import { parseExtractedJSON } from "./llm-service";
+import { MAX_OUTPUT_TOKENS, parseExtractedJSON, postingMessage, truncatedError } from "./llm-service";
 import { getJson, postJson, requireText } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
 interface AnthropicResponse {
   content?: { text?: string }[];
+  stop_reason?: string;
 }
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com";
@@ -37,13 +38,14 @@ export class AnthropicLLMService implements LLMService {
       `${this.baseUrl}/v1/messages`,
       {
         model: this.config.model,
-        max_tokens: 1024,
+        max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt,
-        messages: [{ role: "user", content: input }],
+        messages: [{ role: "user", content: postingMessage(input) }],
       },
       this.headers,
     );
 
+    if (data.stop_reason === "max_tokens") throw truncatedError("Anthropic");
     const text = data.content?.[0]?.text ?? "";
     return parseExtractedJSON(requireText(text, "Anthropic"));
   }

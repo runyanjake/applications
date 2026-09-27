@@ -58,6 +58,34 @@ Self-hosted models are called from the app's main process. Nothing LLM-related i
 2. **Start the server.** CORS settings don't matter: requests come from the app's main process.
 3. **Connect the app:** in **Settings → AI Provider**, pick **Self-hosted (OpenAI-compatible)**, set URL to `http://localhost:1234/v1/chat/completions`, click **Discover**, and select the model.
 4. **Leave Structured Output toggle off.** The JSON schema is sent with every request as `response_format`.
+5. **Nothing to set for thinking.** Requests send `reasoning_effort: "none"` (LM Studio) and `chat_template_kwargs.enable_thinking: false` (vLLM, llama.cpp). The schema constrains only the answer, not reasoning, so a model left thinking can loop until the request times out (240s). Output is capped at 2048 tokens.
+
+To check a model outside the app (expect `reasoning_tokens: 0` and JSON in `content`):
+```bash
+curl -s localhost:1234/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "model": "<model>",
+  "messages": [
+    {"role": "system", "content": "Extract the job title and company."},
+    {"role": "user", "content": "Acme Corp is hiring a Senior Go Engineer in Austin."}
+  ],
+  "temperature": 0,
+  "max_tokens": 2048,
+  "reasoning_effort": "none",
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "job_posting_extraction",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {"position": {"type": "string"}, "companyName": {"type": "string"}},
+        "required": ["position", "companyName"],
+        "additionalProperties": false
+      }
+    }
+  }
+}'
+```
 
 ## Operational Runbook
 

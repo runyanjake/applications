@@ -1,14 +1,17 @@
 import type { ApplicationFormData } from "../../types/application";
 import type { LLMConfig, LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
-import { parseExtractedJSON } from "./llm-service";
+import { parseExtractedJSON, postingMessage, truncatedError } from "./llm-service";
 import { getJson, postJson, requireText, sortModels } from "./llm-http";
 import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
 const API_ROOT = "https://generativelanguage.googleapis.com/v1beta";
 
 interface GeminiResponse {
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
+  candidates?: {
+    content?: { parts?: { text?: string }[] };
+    finishReason?: string;
+  }[];
 }
 
 interface GeminiModelList {
@@ -29,12 +32,14 @@ export class GeminiLLMService implements LLMService {
 
     const data = await postJson<GeminiResponse>("Gemini", url, {
       system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: input }] }],
+      contents: [{ role: "user", parts: [{ text: postingMessage(input) }] }],
       // JSON mode: no code fences or preamble to strip
       generationConfig: { responseMimeType: "application/json" },
     });
 
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const candidate = data.candidates?.[0];
+    if (candidate?.finishReason === "MAX_TOKENS") throw truncatedError("Gemini");
+    const text = candidate?.content?.parts?.[0]?.text ?? "";
     return parseExtractedJSON(requireText(text, "Gemini"));
   }
 

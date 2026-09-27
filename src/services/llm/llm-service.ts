@@ -8,6 +8,20 @@ import { normalizeLocation } from "../../utils/normalize-location";
 
 const log = createLogger("llm");
 
+/** Output cap where thinking is off; the JSON answer needs a few hundred tokens. */
+export const MAX_OUTPUT_TOKENS = 2048;
+
+export function truncatedError(provider: string): Error {
+  return new Error(
+    `${provider} hit its output token limit before finishing. If the model is reasoning, turn thinking off or use a non-reasoning model.`,
+  );
+}
+
+/** The user turn: the posting alone, tagged so the prompt can refer to it as data. */
+export function postingMessage(posting: string): string {
+  return `<job_posting>\n${posting}\n</job_posting>`;
+}
+
 /** Each call is a stateless single-turn chat: system prompt + one user message. */
 export interface LLMService {
   extractApplicationData(
