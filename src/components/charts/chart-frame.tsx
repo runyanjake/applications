@@ -21,10 +21,7 @@ interface ChartFrameProps extends ChartProps {
   caption?: string;
 }
 
-/**
- * Shared title + canvas wrapper for every chart.
- * `notMerge` prevents stale option state leaking across re-renders.
- */
+/** Title + canvas wrapper for every chart; `notMerge` stops stale options leaking across renders. */
 export function ChartFrame({
   option,
   title,

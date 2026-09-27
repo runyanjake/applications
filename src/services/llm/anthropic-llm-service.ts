@@ -9,6 +9,8 @@ interface AnthropicResponse {
   content?: { text?: string }[];
 }
 
+const DEFAULT_BASE_URL = "https://api.anthropic.com";
+
 interface AnthropicModelList {
   data?: { id: string; display_name?: string }[];
 }
@@ -17,12 +19,7 @@ export class AnthropicLLMService implements LLMService {
   private readonly baseUrl: string;
 
   constructor(private readonly config: LLMConfig) {
-    if (!config.baseUrl) {
-      throw new Error(
-        "Anthropic requires a base URL (CORS proxy). The Anthropic API does not support direct browser requests.",
-      );
-    }
-    this.baseUrl = config.baseUrl;
+    this.baseUrl = config.baseUrl || DEFAULT_BASE_URL;
   }
 
   private get headers() {

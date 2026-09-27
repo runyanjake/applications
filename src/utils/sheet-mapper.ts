@@ -69,8 +69,7 @@ function parseStatus(raw: string | undefined): ApplicationStatus {
 function parseHistory(raw: string | undefined): HistoryEntry[] {
   if (!raw) return [];
   try {
-    // Repair a known migration bug: missing closing quote on "from" values,
-    // e.g. `"from":"bookmarked,"to"` → `"from":"bookmarked","to"`
+    // Migration bug repair: `"from":"bookmarked,"to"` → `"from":"bookmarked","to"`
     const repaired = raw.replace(/"from":"(\w+),"to"/g, '"from":"$1","to"');
     const parsed = JSON.parse(repaired);
     return Array.isArray(parsed) ? (parsed as HistoryEntry[]) : [];

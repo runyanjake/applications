@@ -16,9 +16,3 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
 }
-
-export interface AuthService {
-  login(): Promise<{ user: AuthUser; tokens: AuthTokens }>;
-  logout(): Promise<void>;
-  refreshToken(): Promise<AuthTokens>;
-}

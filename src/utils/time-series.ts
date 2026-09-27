@@ -17,22 +17,10 @@ import {
 import type { StatusTimelinePoint } from "../types/chart";
 
 /**
- * Status-over-time as a downsampled time series.
- *
- * Storage stays an event log (each application's `history` column), which is
- * the right raw form at this scale. Queries follow the usual TSDB shape
- * (OpenTSDB's `interval-aggregator-fill`, Prometheus' `*_over_time`):
- *
- *   metric   applications per status (a gauge), tagged by status
- *   interval day | week | month, aligned to calendar boundaries in the
- *            user's timezone (date-fns + @date-fns/tz handle DST)
- *   agg      last  — count at the end of the bucket
- *            max   — highest count reached within the bucket
- *            entered — transitions into the status within the bucket (a
- *                      counter delta, i.e. OpenTSDB `sum` over events)
- *   fill     carry forward — a gauge holds its value through empty buckets
- *
- * One point per bucket is what stops a busy day plotting as a vertical line.
+ * Status counts over time, downsampled from each application's history log.
+ * - interval: day | week | month, calendar-aligned in the user's timezone (DST-safe)
+ * - agg: last (end of bucket) | max (peak in bucket) | entered (transitions in)
+ * - fill: carry forward through empty buckets
  */
 
 export type SeriesInterval = "auto" | "day" | "week" | "month";

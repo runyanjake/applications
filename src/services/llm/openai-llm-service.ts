@@ -27,13 +27,9 @@ const FIELDS: Record<string, { type: string; enum?: string[] }> = {
 const ALWAYS_PRESENT = ["position", "companyName", "companyWebsite", "notes"];
 
 /**
- * Structured-output schema; it is what actually stops a model inventing keys.
- *
- * OpenAI's strict mode requires every key to be required, so optional fields
- * become nullable there (parseExtractedJSON drops the nulls). Local servers
- * get the plain-typed form that is known to work: after switching them to
- * `type: [..., "null"]`, LM Studio returned unconstrained output with invented
- * keys, so the nullable form was evidently not being enforced there.
+ * Structured-output schema (stops invented keys). OpenAI strict mode needs every
+ * key required, so optionals are nullable there (nulls dropped on parse). Local
+ * servers get plain types: LM Studio ignored the nullable form.
  */
 function responseFormat(selfHosted: boolean) {
   const properties = Object.fromEntries(
@@ -92,8 +88,7 @@ export class OpenAILLMService implements LLMService {
     this.apiKey = config.apiKey;
     this.model = config.model;
     this.selfHosted = config.provider === "custom";
-    // Self-hosted users supply the full chat endpoint; for OpenAI we build it
-    // from the (optionally overridden) API root.
+    // Self-hosted: full endpoint given. OpenAI: built from the (overridable) API root.
     this.endpoint =
       this.selfHosted && config.baseUrl
         ? config.baseUrl
@@ -121,8 +116,7 @@ export class OpenAILLMService implements LLMService {
           { role: "user", content: input },
         ],
         response_format: responseFormat(this.selfHosted),
-        // api.openai.com rejects unknown parameters, and its reasoning models
-        // reject a non-default temperature — keep these to local servers
+        // Local only: OpenAI rejects unknown params and non-default temperature on reasoning models
         ...(this.selfHosted && { temperature: 0, enable_thinking: false }),
       },
       this.headers,
@@ -131,8 +125,7 @@ export class OpenAILLMService implements LLMService {
     const message = data.choices?.[0]?.message;
     const content = message?.content ?? "";
     const reasoning = message?.reasoning_content ?? "";
-    // Reasoning models sometimes put the answer in reasoning_content and
-    // leave content empty or prose-only, so take whichever holds the JSON.
+    // Reasoning models may answer in reasoning_content; use whichever holds the JSON
     const text = looksLikeJson(content)
       ? content
       : looksLikeJson(reasoning)
@@ -152,8 +145,7 @@ export class OpenAILLMService implements LLMService {
       );
     }
 
-    // LM Studio can say which models are loaded versus merely downloaded.
-    // Other servers 404 here and fall through to the standard listing.
+    // LM Studio lists loaded vs downloaded models; other servers 404 and fall through
     const native = await getJson<LMStudioModelList>(
       "LM Studio",
       new URL("/api/v0/models", this.endpoint).href,

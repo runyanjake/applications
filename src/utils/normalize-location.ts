@@ -1,10 +1,7 @@
 /**
- * Locations are stored as three comma-separated lists of unique values:
- * city "San Francisco, New York", state "CA, NY", country "US".
- *
- * Models get this wrong in predictable ways even when told the format:
- * "San Francisco, CA; New York, NY" in city, stray empty entries, full
- * country names, or the same value repeated. This repairs those shapes.
+ * Locations are three comma-separated unique lists (city "San Francisco, New York",
+ * state "CA, NY", country "US"). Repairs common model mistakes: "City, ST; ..."
+ * in city, empty entries, full country names, repeats.
  */
 export interface LocationFields {
   city?: string;
@@ -43,8 +40,7 @@ function splitCities(city: string): { cities: string[]; states: string[] } {
     };
   }
 
-  // "San Francisco, CA, New York, NY" — only when names and codes strictly
-  // alternate, so a list of plain city names is never misread
+  // "SF, CA, NY, NY" form — only when names and codes strictly alternate
   const tokens = parts(city, /,/).filter(Boolean);
   const alternates =
     tokens.length % 2 === 0 &&

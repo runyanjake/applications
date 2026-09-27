@@ -15,14 +15,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-/**
- * Stops a render error from blanking the whole app.
- *
- * React unmounts the entire tree when a render throws, so without a boundary
- * anywhere the user gets a white page and the only trace is the browser
- * console. This reports the failure and ships it to the log sink, so a crash in
- * one page leaves the navbar usable and a record behind.
- */
+/** Contains a render error to one page (navbar stays usable) and logs it to file. */
 export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState

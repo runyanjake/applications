@@ -1,6 +1,6 @@
 import { getGoogleAccessToken } from "../auth/access-token";
 
-/** A non-2xx Google API response; `status` is read by isAuthError. */
+/** Non-2xx Google API response; `status` drives isAuthError. */
 export class GoogleApiError extends Error {
   constructor(
     message: string,
@@ -11,10 +11,7 @@ export class GoogleApiError extends Error {
   }
 }
 
-/**
- * Call a Google REST API as the signed-in user. Used instead of gapi.client so
- * the desktop app loads no remote scripts — these endpoints all support CORS.
- */
+/** Authenticated call to a Google REST API (all support CORS). */
 export async function googleFetch<T = unknown>(
   url: string,
   method = "GET",
@@ -33,7 +30,7 @@ export async function googleFetch<T = unknown>(
   });
 
   if (!response.ok) {
-    // Google error bodies look like { error: { code, message, status } }
+    // Error bodies look like { error: { code, message, status } }
     const detail = await response
       .json()
       .then((json: { error?: { message?: string } }) => json.error?.message)

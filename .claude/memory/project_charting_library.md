@@ -27,7 +27,7 @@ All chart components use **Apache ECharts** via `echarts-for-react`. Recharts wa
 ## Code splitting
 
 ECharts is ~1.1 MB, so `/analytics` and `/report` are `React.lazy` routes in `src/app.tsx` and
-`vite.config.ts` puts echarts in its own manual chunk. Keep new chart-using pages lazy.
+`electron.vite.config.ts` puts echarts in its own manual chunk. Keep new chart-using pages lazy.
 
 ## Status timeline = downsampled series
 

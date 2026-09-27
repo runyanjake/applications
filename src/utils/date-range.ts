@@ -9,10 +9,7 @@ const PRESET_DAYS: Record<Exclude<DatePreset, "all" | "custom">, number> = {
   year: 365,
 };
 
-/**
- * The presets offered by the picker. "custom" is absent on purpose — it is
- * entered by typing explicit dates, not by clicking a segment.
- */
+/** Clickable presets; "custom" comes from typed dates instead. */
 export const DATE_PRESET_OPTIONS = [
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
@@ -84,10 +81,7 @@ export function isDateFilterActive(filters: ApplicationFilters): boolean {
   return Boolean(bounds.from || bounds.to);
 }
 
-/**
- * A bare YYYY-MM-DD is a calendar day, not an instant — read it back in UTC so
- * a negative-offset timezone does not render it as the day before.
- */
+/** YYYY-MM-DD is a calendar day: read in UTC so negative offsets don't shift it back. */
 function formatDay(day: string): string {
   return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
     year: "numeric",

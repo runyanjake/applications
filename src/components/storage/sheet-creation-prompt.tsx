@@ -2,10 +2,7 @@ import { useStorage } from "../../hooks/use-storage";
 import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 
-/**
- * Consent step shown when the chosen spreadsheet has no "Applications" sheet.
- * Rendered by both the first-run setup screen and the settings card.
- */
+/** Consent to add an "Applications" sheet; used by first-run setup and settings. */
 export function SheetCreationPrompt({ className = "" }: { className?: string }) {
   const { pendingSheetCreation, confirmSheetCreation, cancelSheetCreation } =
     useStorage();

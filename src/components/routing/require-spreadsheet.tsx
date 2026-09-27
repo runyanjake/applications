@@ -9,14 +9,9 @@ import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 
 /**
- * Gate for every page that reads application data: sends the user home when no
- * spreadsheet is connected, waits for the initial load, and shows why that load
- * failed instead of leaving the page silently empty.
- *
- * Disconnecting mid-session unmounts whichever data page you were on rather
- * than leaving it half-rendered against data that no longer exists. The landing
- * route owns the reconnect screen, so it renders the setup prompt in place —
- * redirecting from there to itself would loop.
+ * Gate for data pages: redirects home without a spreadsheet, waits for the
+ * initial load, and surfaces load errors. Home renders setup in place (redirecting
+ * to itself would loop).
  */
 export function RequireSpreadsheet({ children }: { children: ReactNode }) {
   const { isConfigured } = useStorage();

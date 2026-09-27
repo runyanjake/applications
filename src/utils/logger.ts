@@ -4,15 +4,7 @@ import {
   type RemoteLogEvent,
 } from "./log-transport";
 
-/**
- * Scoped logger. Events at or above the configured level go to the console
- * and are shipped to the log-sink service, which writes the rotating files
- * under the mounted logs directory.
- *
- * The level is deployment configuration, not a user setting: the container's
- * `LOG_LEVEL` env var is served as `/config.js` (see nginx.conf). Development
- * defaults to debug, production to info.
- */
+/** Scoped logger: console plus the main process's log files. Debug in dev, info in builds. */
 const LEVEL_RANK: Record<LogLevel, number> = {
   debug: 0,
   info: 1,
@@ -20,13 +12,7 @@ const LEVEL_RANK: Record<LogLevel, number> = {
   error: 3,
 };
 
-function resolveLevel(): LogLevel {
-  const configured = window.__APP_CONFIG__?.logLevel?.toLowerCase();
-  if (configured && Object.prototype.hasOwnProperty.call(LEVEL_RANK, configured)) return configured as LogLevel;
-  return import.meta.env.DEV ? "debug" : "info";
-}
-
-const threshold = LEVEL_RANK[resolveLevel()];
+const threshold = LEVEL_RANK[import.meta.env.DEV ? "debug" : "info"];
 
 function enabled(level: LogLevel): boolean {
   return LEVEL_RANK[level] >= threshold;

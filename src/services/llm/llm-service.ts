@@ -8,10 +8,7 @@ import { normalizeLocation } from "../../utils/normalize-location";
 
 const log = createLogger("llm");
 
-/**
- * Every call is a fresh single-turn chat — the system prompt plus one user
- * message — so no conversation state is kept or resent between requests.
- */
+/** Each call is a stateless single-turn chat: system prompt + one user message. */
 export interface LLMService {
   extractApplicationData(
     input: string,
@@ -20,11 +17,7 @@ export interface LLMService {
   listModels(): Promise<LLMModel[]>;
 }
 
-/**
- * Pasted postings carry lots of layout whitespace (indentation, runs of blank
- * lines, non-breaking spaces). None of it helps the model, and it is sent and
- * tokenized on every request.
- */
+/** Collapse layout whitespace from pasted postings; it only costs tokens. */
 export function compactWhitespace(text: string): string {
   return text
     .replace(/[^\S\n]+/g, " ")
@@ -45,10 +38,7 @@ export function createLLMService(config: LLMConfig): LLMService {
   }
 }
 
-/**
- * Notes are a bulleted list, one "- " item per line. Models vary the marker
- * ("•", "*", "1.") or skip it, so every non-empty line is rewritten to "- ".
- */
+/** Normalize notes to "- " bullets; models vary the marker or omit it. */
 export function toBulletList(notes: string): string {
   return notes
     .split(/\n+/)
@@ -58,10 +48,7 @@ export function toBulletList(notes: string): string {
     .join("\n");
 }
 
-/**
- * Parse the LLM response text into a partial ApplicationFormData object.
- * Strips markdown code fences if the model wraps its response.
- */
+/** Parse model output (code fences allowed) into partial form data. */
 export function parseExtractedJSON(
   text: string,
 ): Partial<ApplicationFormData> {
@@ -75,8 +62,7 @@ export function parseExtractedJSON(
   if (fenceMatch?.[1]) {
     cleaned = fenceMatch[1].trim();
   } else {
-    // For thinking models that prepend reasoning before the JSON,
-    // find the outermost JSON object by scanning from the last closing brace
+    // Thinking models prepend reasoning: take the outermost object ending at the last "}"
     const lastBrace = cleaned.lastIndexOf("}");
     if (lastBrace !== -1) {
       let depth = 0;
@@ -96,8 +82,7 @@ export function parseExtractedJSON(
 
   log.debug("Raw response:", text);
 
-  // Some older models emit a literal "/n" between members instead of a
-  // newline (`"https://scale.com",/n"city"`), which is invalid JSON
+  // Some models emit a literal "/n" between members: `"a",/n"city"`
   cleaned = cleaned.replace(/([{,])\s*\/n\s*(?=")/g, "$1\n");
 
   const parsed = JSON.parse(cleaned) as Record<string, unknown>;

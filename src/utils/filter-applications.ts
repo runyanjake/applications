@@ -5,12 +5,7 @@ function includesText(haystack: string, needle: string): boolean {
   return haystack.toLowerCase().includes(needle.toLowerCase());
 }
 
-/**
- * True when an application satisfies every active filter.
- *
- * The period arrives pre-resolved as `bounds` so a relative preset is turned
- * into concrete days once per pass rather than once per application.
- */
+/** Matches every active filter; `bounds` is the period resolved once per pass. */
 export function matchesFilters(
   app: Application,
   filters: ApplicationFilters,

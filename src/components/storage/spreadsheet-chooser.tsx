@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { PickerDocument } from "../../types/google";
 import {
   listSpreadsheets,
   type DriveSpreadsheet,
@@ -17,14 +16,11 @@ const log = createLogger("spreadsheet-chooser");
 const SEARCH_DEBOUNCE_MS = 300;
 
 interface SpreadsheetChooserProps {
-  onSelect: (doc: PickerDocument) => void;
+  onSelect: (doc: DriveSpreadsheet) => void;
   onCancel: () => void;
 }
 
-/**
- * In-app spreadsheet list backed by the Drive API — the desktop app's stand-in
- * for the Google Picker, which needs a Google web session the app doesn't have.
- */
+/** Drive-backed spreadsheet list; the Google Picker can't sign in inside Electron. */
 export function SpreadsheetChooser({ onSelect, onCancel }: SpreadsheetChooserProps) {
   const { logout } = useAuth();
   const [query, setQuery] = useState("");

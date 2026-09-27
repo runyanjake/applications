@@ -192,8 +192,7 @@ function registerIpcHandlers(): void {
     }
     secureStorage.clearTokens();
     secureStorage.clearUser();
-    // Drop any Google web session a page may have set, so the next sign-in
-    // starts clean. Other storage (e.g. LLM settings) is kept.
+    // Clear cookies only; localStorage holds LLM settings
     await session.defaultSession.clearStorageData({ storages: ["cookies"] });
   });
 
@@ -241,9 +240,7 @@ function registerIpcHandlers(): void {
     };
   });
 
-  // LLM: proxy requests from the main process so they aren't subject to the
-  // renderer's CSP or CORS (self-hosted servers rarely send CORS headers).
-  // Network failures reject; HTTP errors resolve with ok: false.
+  // LLM proxy: no renderer CSP/CORS here. Network errors reject; HTTP errors resolve ok: false.
   ipcMain.handle(
     "llm:request",
     async (_: IpcMainInvokeEvent, req: LlmRequest): Promise<LlmResponse> => {

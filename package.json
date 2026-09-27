@@ -13,10 +13,7 @@
     "package:win": "electron-vite build && electron-builder --win",
     "package:linux": "electron-vite build && electron-builder --linux",
     "lint": "eslint .",
-    "typecheck": "tsc -b",
-    "dev:web": "vite",
-    "build:web": "tsc -b && vite build",
-    "preview:web": "vite preview"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -28,7 +25,6 @@
     "react-router-dom": "^7.1.0"
   },
   "devDependencies": {
-    "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@eslint/js": "^9.17.0",
     "@tailwindcss/vite": "^4.0.0",

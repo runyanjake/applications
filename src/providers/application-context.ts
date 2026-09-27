@@ -19,10 +19,7 @@ export interface ApplicationContextValue {
   sync: () => Promise<void>;
   forceOverwrite: () => Promise<void>;
   reloadFromRemote: () => Promise<void>;
-  /**
-   * The filter selection, shared by every page that shows application data so
-   * a period chosen on one tab still applies on the next.
-   */
+  /** Shared across pages so a chosen period carries over. */
   filters: ApplicationFilters;
   setFilters: (filters: ApplicationFilters) => void;
   /** `applications` narrowed by `filters` — what pages should render. */

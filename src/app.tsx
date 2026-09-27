@@ -11,8 +11,7 @@ import { ApplicationsPage } from "./pages/applications-page";
 import { AddApplicationPage } from "./pages/add-application-page";
 import { SettingsPage } from "./pages/settings-page";
 
-// The charting library is a megabyte of JavaScript that only these two routes
-// need, so it loads on demand rather than in the entry chunk.
+// Lazy: ECharts (~1MB) is only needed on these routes
 const AnalyticsPage = lazy(() =>
   import("./pages/analytics-page").then((m) => ({ default: m.AnalyticsPage })),
 );

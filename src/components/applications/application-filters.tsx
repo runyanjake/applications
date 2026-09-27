@@ -14,11 +14,7 @@ interface ApplicationFiltersBarProps {
   filters: ApplicationFilters;
   onChange: (filters: ApplicationFilters) => void;
   className?: string;
-  /**
-   * "full" is the whole bar: period, search and the expandable filters.
-   * "period" is the period picker alone, for pages that only scope by time —
-   * same state, same presets, just less chrome.
-   */
+  /** "full": period, search, expandable filters. "period": period control only, same state. */
   variant?: "full" | "period";
 }
 
@@ -46,10 +42,7 @@ function FilterField({
   );
 }
 
-/**
- * Count of the filters hidden behind the Filters button. The period and the
- * search box are always on screen, so counting them would be double-reporting.
- */
+/** Active filters hidden behind the Filters button (period and search are always visible). */
 function countHidden(filters: ApplicationFilters): number {
   return (
     (filters.status?.length ? 1 : 0) +
@@ -83,8 +76,7 @@ export function ApplicationFiltersBar({
   const hiddenCount = countHidden(filters);
   const canClear = hiddenCount > 0 || preset !== "all";
 
-  // "Custom" is reachable only through the date inputs, so it appears as a
-  // segment just to show where the current period came from.
+  // "Custom" is set via the date inputs; shown as a segment only to reflect it
   const presetOptions =
     preset === "custom"
       ? [...DATE_PRESET_OPTIONS, { value: "custom" as const, label: "Custom" }]

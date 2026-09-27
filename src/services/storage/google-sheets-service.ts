@@ -76,8 +76,7 @@ export class GoogleSheetsService implements StorageService {
     const allRows = [HEADER_ROW, ...applications.map(applicationToRow)];
     const endRow = allRows.length;
 
-    // History lives as JSON in column R; a past bug blanked it on write, so
-    // flag anything going out empty before it overwrites good remote data.
+    // History (JSON, column R) was once blanked by a bug; flag empties before overwriting
     const missingHistory = applications
       .filter((app) => (app.history ?? []).length === 0)
       .map((app) => app.id);
@@ -159,10 +158,7 @@ export class GoogleSheetsService implements StorageService {
     );
   }
 
-  /**
-   * Write the header if it is missing, wrong, or shorter than expected — the
-   * last case covers sheets created before the History column existed.
-   */
+  /** Write the header if missing, wrong, or short (sheets predating the History column). */
   private async ensureHeaderRow(): Promise<void> {
     const firstRow = (await this.readRange(`A1:${LAST_COLUMN}1`))[0];
     const needsUpdate =

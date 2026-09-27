@@ -4,46 +4,28 @@ interface RequestInitJson {
   body?: string;
 }
 
-/**
- * Send the request from the renderer, or in Electron via the main process so it
- * bypasses the page CSP and CORS. Normalized to what requestJson needs.
- */
-async function send(
-  url: string,
-  init: RequestInitJson,
-): Promise<{ ok: boolean; status: number; text(): Promise<string> }> {
-  if (window.electronAPI) {
-    const res = await window.electronAPI.llm.request({ url, ...init });
-    return { ok: res.ok, status: res.status, text: async () => res.body };
-  }
-  return fetch(url, init);
-}
-
-/** Shared request plumbing for the LLM providers. */
+/** LLM requests go through the main process: no CSP or CORS limits there. */
 async function requestJson<T>(
   provider: string,
   url: string,
   init: RequestInitJson,
 ): Promise<T> {
-  let response: Awaited<ReturnType<typeof send>>;
+  let response: { ok: boolean; status: number; body: string };
   try {
-    response = await send(url, init);
+    response = await window.electronAPI.llm.request({ url, ...init });
   } catch (err) {
-    // fetch only rejects on network/CORS failures, which are the common
-    // self-hosted misconfiguration — say so rather than "Failed to fetch".
-    // The URL is shown without its query, which can carry an API key.
+    // Network failure. The query is dropped: it can carry an API key.
     throw new Error(
-      `Could not reach the ${provider} endpoint at ${url.split("?")[0]}. Check the URL and that the server allows cross-origin requests. (${
+      `Could not reach the ${provider} endpoint at ${url.split("?")[0]}. Check the URL and that the server is running. (${
         err instanceof Error ? err.message : String(err)
       })`,
     );
   }
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`${provider} API error (${response.status}): ${detail}`);
+    throw new Error(`${provider} API error (${response.status}): ${response.body}`);
   }
-  return JSON.parse(await response.text()) as T;
+  return JSON.parse(response.body) as T;
 }
 
 export function postJson<T>(

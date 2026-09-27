@@ -1,41 +1,44 @@
 ---
 name: Google API Integration — Gotchas
-description: Picker disposal, gapi token ordering, and which GCP APIs must be enabled for the Applications app.
+description: Desktop OAuth, REST-over-fetch instead of gapi, why the Google Picker is not used, token ordering, required GCP APIs.
 type: project
 ---
 
-## Picker instances must be disposed
+## Auth lives in the main process
 
-`google.picker` leaves its dialog and backdrop in the DOM after a pick or cancel. A second
-`PickerBuilder(...).setVisible(true)` then silently fails to appear — the "Change Spreadsheet does
-nothing" bug. `src/services/picker/google-picker-service.ts` keeps a module-level reference to the
-open picker and calls `setVisible(false)` + `dispose()` on every exit path. Never build a picker
-without disposing the previous one.
+Loopback OAuth (`electron/main/oauth-server.ts`) with a **Desktop app** OAuth client; credentials
+come from `MAIN_VITE_GOOGLE_CLIENT_ID`/`_SECRET` in `.env`, inlined at build time. Refresh tokens
+are in `safeStorage`; `auth:get-session` refreshes an expired access token on startup. In GCP
+"Testing" mode refresh tokens expire after 7 days.
 
-## gapi holds its own token copy
+## No gapi, no Google Picker
 
-React effects run child-before-parent, so a data-loading child provider can fire a Sheets request
-before `AuthProvider` (above it) installs the OAuth token. Any code path about to call the Sheets
-API calls `setGapiAccessToken()` from `src/services/auth/gapi-token.ts` first.
+**Why:** gapi.client loads remote scripts and proxies through hidden iframes (needs a loose CSP).
+The Picker needs a Google web session in the embedding window, and Google blocks sign-in inside
+Electron windows (403 `disallowed_useragent`).
+
+**How to apply:** call Google APIs through `googleFetch` (`src/services/google/google-fetch.ts`),
+and add any new host to the CSP in `index.html`. Spreadsheet selection uses Drive `files.list`
+(`drive-spreadsheets.ts` + `spreadsheet-chooser.tsx`). Don't reintroduce gapi or the Picker.
+
+## Token ordering
+
+React effects run child-before-parent, so a data-loading child can fire a Sheets request before
+`AuthProvider` installs the token. Code about to call Sheets calls `setGoogleAccessToken()` first
+(`src/services/auth/access-token.ts`).
 
 ## Loading must be keyed, not one-shot
 
 `ApplicationProvider` tracks `loadedIdRef` (the spreadsheet id already loaded) and re-runs the load
-when the access token arrives. Keying on the id — not on the token — means a token refresh never
+when the access token arrives. Keying on the id — not the token — means a token refresh never
 discards unsynced local edits. A failed load leaves `loadedIdRef` unset so it retries.
 
 ## Required GCP APIs
 
-Sheets API, **Drive API**, and **Picker API** all have to be enabled on the project behind
-`VITE_GOOGLE_API_KEY`. Verified 2026-09-07 against the live deployment at apply.whitney.rip: the
-API key baked into the published bundle is valid and the Sheets API answers with it. So a
-"nothing loads" report is not a stale key — check Drive/Picker enablement and the key's
-HTTP-referrer restrictions instead.
+Sheets API and Drive API. No API key is needed. Scopes: `userinfo.email`, `userinfo.profile`,
+`spreadsheets`, `drive.readonly`.
 
 ## Errors are never swallowed
 
-`describeGoogleError` in `src/utils/google-error.ts` decodes gapi's plain-object rejections
-(`{result:{error:{code,message}}}` etc.). Surface it in the UI; don't fall back to
-`err instanceof Error ? err.message : "..."`, which produces useless generic text.
-There is no in-app diagnostics panel (removed: users must not see or change integration
-config or logging). Debug logs come from deploying with `LOG_LEVEL=debug`.
+`googleFetch` throws `GoogleApiError` with Google's message and HTTP status; `isAuthError` (401/403)
+drives the "sign in again" UI. Surface `describeGoogleError(err)` rather than generic text.

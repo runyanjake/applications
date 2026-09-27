@@ -6,18 +6,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AuthState, AuthTokens, AuthUser } from "../types/auth";
-import { createAuthService } from "../services/auth/auth-service";
+import type { AuthState, AuthTokens } from "../types/auth";
+import { ElectronAuthService } from "../services/auth/electron-auth-service";
 import { setGoogleAccessToken } from "../services/auth/access-token";
-import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
 import { createLogger } from "../utils/logger";
 import { setLogUser } from "../utils/log-transport";
 import { AuthContext } from "./auth-context";
 
 const log = createLogger("auth");
-
-const SESSION_KEY_USER = "auth:user";
-const SESSION_KEY_TOKENS = "auth:tokens";
 
 /** Refresh this long before expiry, but never sooner than a minute from now. */
 const REFRESH_LEAD_MS = 5 * 60 * 1000;
@@ -30,25 +26,12 @@ const SIGNED_OUT: AuthState = {
   isLoading: false,
 };
 
-/** Restore a session, ignoring tokens too close to expiry to be usable. */
-function restoreSession(): AuthState {
-  // In Electron, we restore asynchronously after mount
-  if (window.electronAPI) {
-    return { ...SIGNED_OUT, isLoading: true };
-  }
-  // Web: use sessionStorage
-  const user = sessionGet<AuthUser>(SESSION_KEY_USER);
-  const tokens = sessionGet<AuthTokens>(SESSION_KEY_TOKENS);
-  const isValid = tokens != null && tokens.expiresAt - Date.now() > MIN_REFRESH_DELAY_MS;
-  if (!isValid || user == null) return SIGNED_OUT;
-  return { user, tokens, isAuthenticated: true, isLoading: false };
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const authService = useRef(createAuthService());
+  const authService = useRef(new ElectronAuthService());
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [state, setState] = useState<AuthState>(restoreSession);
+  // Loading until the stored session is restored from the main process
+  const [state, setState] = useState<AuthState>({ ...SIGNED_OUT, isLoading: true });
 
   // Tag log events with the opaque Google account id (never the email)
   useEffect(() => {
@@ -58,8 +41,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOutLocally = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
     setLogUser(null);
-    sessionRemove(SESSION_KEY_USER);
-    sessionRemove(SESSION_KEY_TOKENS);
     setGoogleAccessToken(null);
     setState(SIGNED_OUT);
   }, []);
@@ -74,7 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshTimer.current = setTimeout(async () => {
         try {
           const newTokens = await authService.current.refreshToken();
-          sessionSet(SESSION_KEY_TOKENS, newTokens);
           setState((prev) => ({ ...prev, tokens: newTokens }));
           scheduleRefresh(newTokens);
         } catch (err) {
@@ -95,10 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [state.tokens, state.isAuthenticated, scheduleRefresh]);
 
-  // Restore session from Electron's secure storage on mount
+  // Restore the session from the main process's secure storage
   useEffect(() => {
-    if (!window.electronAPI) return;
-
     window.electronAPI.auth.getStoredSession().then((session) => {
       if (session && session.tokens.expiresAt > Date.now() + MIN_REFRESH_DELAY_MS) {
         setGoogleAccessToken(session.tokens.accessToken);
@@ -124,8 +102,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, isLoading: true }));
     try {
       const result = await authService.current.login();
-      sessionSet(SESSION_KEY_USER, result.user);
-      sessionSet(SESSION_KEY_TOKENS, result.tokens);
       setState({
         user: result.user,
         tokens: result.tokens,

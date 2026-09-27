@@ -30,7 +30,3 @@ npm-debug.log*
 
 # TypeScript build info
 *.tsbuildinfo
-
-# Local log-sink output
-logs/
-server/logs/

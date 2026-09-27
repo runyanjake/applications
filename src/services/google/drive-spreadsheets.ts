@@ -1,19 +1,12 @@
-import type { PickerDocument } from "../../types/google";
 import { googleFetch } from "./google-fetch";
 
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const SPREADSHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const PAGE_SIZE = 50;
 
-export interface DriveSpreadsheet extends PickerDocument {
-  modifiedTime?: string;
-}
-
-interface DriveFile {
+export interface DriveSpreadsheet {
   id: string;
   name: string;
-  mimeType: string;
-  webViewLink?: string;
   modifiedTime?: string;
 }
 
@@ -22,11 +15,7 @@ function escapeQueryValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-/**
- * The user's Google Sheets, most recently used first, optionally filtered by
- * name. Replaces the Google Picker in the desktop app, which can't sign in to
- * Google inside an embedded browser window.
- */
+/** The user's Google Sheets, most recent first, optionally filtered by name. */
 export async function listSpreadsheets(
   nameFilter = "",
 ): Promise<DriveSpreadsheet[]> {
@@ -38,19 +27,13 @@ export async function listSpreadsheets(
     q: clauses.join(" and "),
     orderBy: "recency desc",
     pageSize: String(PAGE_SIZE),
-    fields: "files(id,name,mimeType,webViewLink,modifiedTime)",
+    fields: "files(id,name,modifiedTime)",
     includeItemsFromAllDrives: "true",
     supportsAllDrives: "true",
   });
 
-  const result = await googleFetch<{ files?: DriveFile[] }>(
+  const result = await googleFetch<{ files?: DriveSpreadsheet[] }>(
     `${DRIVE_FILES_URL}?${params}`,
   );
-  return (result.files ?? []).map((file) => ({
-    id: file.id,
-    name: file.name,
-    mimeType: file.mimeType,
-    url: file.webViewLink ?? `https://docs.google.com/spreadsheets/d/${file.id}`,
-    modifiedTime: file.modifiedTime,
-  }));
+  return result.files ?? [];
 }

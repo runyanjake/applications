@@ -7,12 +7,11 @@ import {
   type ReactNode,
 } from "react";
 import type { StorageService } from "../types/storage";
-import type { PickerDocument } from "../types/google";
+import type { DriveSpreadsheet } from "../services/google/drive-spreadsheets";
 import { createStorageService } from "../services/storage/storage-service";
-import { openSpreadsheetPicker } from "../services/picker/google-picker-service";
 import { SpreadsheetChooser } from "../components/storage/spreadsheet-chooser";
 import { useAuth } from "../hooks/use-auth";
-import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
+import { sessionRemove } from "../utils/session-store";
 import { describeGoogleError } from "../utils/google-error";
 import { createLogger } from "../utils/logger";
 import {
@@ -25,30 +24,21 @@ const log = createLogger("storage");
 /** Session keys owned by ApplicationProvider — cleared when the sheet changes. */
 const APP_SESSION_KEYS = ["applications", "sync-state", "filters"] as const;
 
-const SESSION_KEY = "storage:spreadsheet";
 const SHEET_NAME = "Applications";
 
-/** Configure the service and persist the spreadsheet info to session/storage. */
+/** Point the service at the spreadsheet and persist the choice. */
 function commitSpreadsheet(
   service: StorageService,
   info: SpreadsheetInfo,
 ): void {
   service.configure({ spreadsheetId: info.id, sheetName: SHEET_NAME });
-  if (window.electronAPI) {
-    window.electronAPI.storage.saveSpreadsheetInfo(info);
-  } else {
-    sessionSet(SESSION_KEY, info);
-  }
+  window.electronAPI.storage.saveSpreadsheetInfo(info);
 }
 
 /** Reset the service and clear all app-related session data. */
 function resetService(service: StorageService): void {
   service.configure({ spreadsheetId: "", sheetName: SHEET_NAME });
-  if (window.electronAPI) {
-    window.electronAPI.storage.clearSpreadsheetInfo();
-  } else {
-    sessionRemove(SESSION_KEY);
-  }
+  window.electronAPI.storage.clearSpreadsheetInfo();
   APP_SESSION_KEYS.forEach(sessionRemove);
 }
 
@@ -56,36 +46,31 @@ export function StorageProvider({ children }: { children: ReactNode }) {
   const { state: authState } = useAuth();
   const service = useRef(createStorageService());
 
-  const [spreadsheet, setSpreadsheet] = useState<SpreadsheetInfo | null>(() => {
-    if (window.electronAPI) {
-      return window.electronAPI.storage.loadSpreadsheetInfo();
-    }
-    return sessionGet<SpreadsheetInfo>(SESSION_KEY);
-  });
+  const [spreadsheet, setSpreadsheet] = useState<SpreadsheetInfo | null>(() =>
+    window.electronAPI.storage.loadSpreadsheetInfo(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
   const [pendingSheetCreation, setPendingSheetCreation] =
     useState<SpreadsheetInfo | null>(null);
   const hasPrompted = useRef(false);
 
-  // Desktop: the in-app chooser dialog stands in for the Google Picker, which
-  // can't sign in to Google inside an Electron window. pickSpreadsheet awaits
-  // the dialog through this resolver.
+  // pickSpreadsheet awaits the chooser dialog through this resolver
   const [isChooserOpen, setIsChooserOpen] = useState(false);
-  const chooserResolve = useRef<((doc: PickerDocument | null) => void) | null>(
+  const chooserResolve = useRef<((doc: DriveSpreadsheet | null) => void) | null>(
     null,
   );
 
   const openChooser = useCallback(
     () =>
-      new Promise<PickerDocument | null>((resolve) => {
+      new Promise<DriveSpreadsheet | null>((resolve) => {
         chooserResolve.current = resolve;
         setIsChooserOpen(true);
       }),
     [],
   );
 
-  const closeChooser = useCallback((doc: PickerDocument | null) => {
+  const closeChooser = useCallback((doc: DriveSpreadsheet | null) => {
     setIsChooserOpen(false);
     chooserResolve.current?.(doc);
     chooserResolve.current = null;
@@ -102,28 +87,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     }
   }, [spreadsheet]);
 
-  /**
-   * The single spreadsheet-selection flow: open the picker, validate the
-   * choice against a throwaway service (so the live one is untouched until
-   * the choice is known-good), then commit.
-   */
+  /** Choose, validate on a throwaway service, then commit. */
   const pickSpreadsheet = useCallback(async () => {
     setIsPicking(true);
     setError(null);
     try {
-      let doc;
-      if (window.electronAPI) {
-        doc = await openChooser();
-      } else {
-        // Web: use Google Picker with access token
-        const accessToken = authState.tokens?.accessToken;
-        if (!accessToken) {
-          setError("You are signed out. Sign in again to choose a spreadsheet.");
-          setIsPicking(false);
-          return;
-        }
-        doc = await openSpreadsheetPicker(accessToken);
-      }
+      const doc = await openChooser();
       if (!doc) return; // cancelled
 
       const probe = createStorageService();
@@ -149,9 +118,9 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsPicking(false);
     }
-  }, [authState.tokens?.accessToken, openChooser]);
+  }, [openChooser]);
 
-  // Open the picker once per session on login when nothing is configured yet
+  // Open the chooser once per session on login when nothing is configured yet
   useEffect(() => {
     if (
       !authState.isAuthenticated ||
@@ -186,17 +155,12 @@ export function StorageProvider({ children }: { children: ReactNode }) {
     }
     setError(null);
     setPendingSheetCreation(null);
-    if (window.electronAPI) {
-      window.electronAPI.storage.saveSpreadsheetInfo(pendingSheetCreation);
-    } else {
-      sessionSet(SESSION_KEY, pendingSheetCreation);
-    }
+    window.electronAPI.storage.saveSpreadsheetInfo(pendingSheetCreation);
     setSpreadsheet(pendingSheetCreation);
   }, [pendingSheetCreation]);
 
   const cancelSheetCreation = useCallback(() => {
-    // The live service was never reconfigured, so there is nothing to revert.
-    // With no previous spreadsheet, drop any stale app session data.
+    // Live service was never reconfigured; just drop stale data if nothing was connected
     if (!spreadsheet) resetService(service.current);
     setPendingSheetCreation(null);
     setError(null);
@@ -204,12 +168,7 @@ export function StorageProvider({ children }: { children: ReactNode }) {
 
   const clearSpreadsheet = useCallback(() => {
     resetService(service.current);
-    // Disconnecting must not reopen the picker. Marking the prompt as spent is
-    // what makes that true: the auto-prompt effect only sets this ref when it
-    // actually fires, so a session that started with a spreadsheet already in
-    // storage still has it false. Without this line, clearing the spreadsheet
-    // satisfies every condition in that effect and drops the picker's modal
-    // backdrop over the page — which reads as a white, unclickable screen.
+    // Otherwise the auto-prompt effect reopens the chooser right after disconnecting
     hasPrompted.current = true;
     setSpreadsheet(null);
     setError(null);

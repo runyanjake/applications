@@ -134,8 +134,7 @@ export function StatusTimelineChart({
         ? { type: "bar", stack: "entered", barMaxWidth: 24 }
         : {
             type: "line",
-            // A count holds its value until the next bucket changes it; a
-            // smoothed curve would invent fractional in-between values
+            // Step, not smooth: counts hold until the next bucket
             step: "end",
             showSymbol: points.length <= 60,
             symbolSize: 5,

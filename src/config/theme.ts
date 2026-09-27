@@ -1,9 +1,6 @@
 import type { ApplicationStatus, InterestLevel } from "../types/application";
 
-/**
- * Single source of truth for status/interest colours.
- * `*_HEX` values feed the charts, `*_BADGE` values feed Tailwind pills.
- */
+/** Status/interest colours: `*_HEX` for charts, `*_BADGE` for Tailwind pills. */
 export const STATUS_HEX: Record<ApplicationStatus, string> = {
   bookmarked: "#9ca3af",
   applied: "#818cf8",

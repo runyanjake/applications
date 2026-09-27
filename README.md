@@ -14,7 +14,7 @@ flowchart LR
   subgraph electron["Electron App"]
     main["Main Process<br/>(Node.js)"]
     renderer["Renderer Process<br/>(React SPA)"]
-    preload["Preload Scripts<br/>(contextBridge)"]
+    preload["Preload Script<br/>(contextBridge)"]
   end
   subgraph local["Local Storage"]
     tokens[("Encrypted Tokens<br/>(safeStorage)")]
@@ -39,33 +39,23 @@ Details on architecture and data flow are in [`.claude/DESIGN.md`](.claude/DESIG
 - Node.js >= 22 and npm
 - A Google Cloud project with the **Sheets** and **Drive** APIs enabled
 - OAuth credentials:
-  - **Desktop app:** OAuth 2.0 Client ID of type "Desktop app" (includes client secret)
-  - **API Key:** only for the browser build, which uses the Google Picker (also enable the **Picker** API)
-  - **OAuth consent screen** with your account added as a test user
+  - OAuth 2.0 Client ID of type "Desktop app" (includes client secret)
+  - OAuth consent screen with your account added as a test user
 
 ## Configuration & Environment Variables
 
-### Electron Desktop App
-Set these in `.env` (template: [`.env.electron.example`](.env.electron.example)). electron-vite inlines them into the build, so **rebuild or restart `npm run dev` after changing them**. Because the client secret ends up in `out/` and `dist/`, both are gitignored.
+Set these in `.env` (template: [`.env.example`](.env.example)). electron-vite inlines them into the build, so **rebuild or restart `npm run dev` after changing them**. Because the client secret ends up in `out/` and `dist/`, both are gitignored.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `MAIN_VITE_GOOGLE_CLIENT_ID` | Yes | Desktop OAuth Client ID |
 | `MAIN_VITE_GOOGLE_CLIENT_SECRET` | Yes | Desktop OAuth Client Secret |
 
-### Web Development (Optional)
-For browser-based development without Electron, set these in `.env`:
-
-| Variable | Required | Notes |
-| --- | --- | --- |
-| `VITE_GOOGLE_CLIENT_ID` | Yes | Web OAuth Client ID |
-| `VITE_GOOGLE_API_KEY` | Yes | API key for the Google Picker |
-
 ## LM Studio Configuration
 Self-hosted models are called from the app's main process. Nothing LLM-related is bundled with the application.
 
 1. **Load the model:** in LM Studio's **Developer** tab, load a chat model (7B+). Set **Context Length** to 8192 or more. From CLI: `lms load <model> --context-length 8192`.
-2. **Start the server:** start the server. **Enable CORS** is only needed for the browser build (`npm run dev:web`); the desktop app sends requests from the main process, where CORS doesn't apply.
+2. **Start the server.** CORS settings don't matter: requests come from the app's main process.
 3. **Connect the app:** in **Settings → AI Provider**, pick **Self-hosted (OpenAI-compatible)**, set URL to `http://localhost:1234/v1/chat/completions`, click **Discover**, and select the model.
 4. **Leave Structured Output toggle off.** The JSON schema is sent with every request as `response_format`.
 
@@ -79,27 +69,22 @@ npm install
 ```
 
 ### GCP OAuth Setup
-1. **APIs & Services → Library:** enable the **Google Sheets API** and **Google Drive API** (plus the **Google Picker API** for the browser build).
+1. **APIs & Services → Library:** enable the **Google Sheets API** and **Google Drive API**.
 2. **Google Auth Platform → Branding / Audience / Data Access:**
    - **User type:** External (or Internal on Workspace).
    - **Scopes:** `userinfo.email`, `userinfo.profile`, `.../auth/spreadsheets`, `.../auth/drive.readonly`.
    - **Test users:** add your Google account.
    - While the app is in **Testing**, refresh tokens expire after 7 days, so expect to sign in weekly. **Publish app** (unverified, with a warning screen and a 100-user cap) removes that limit.
 3. **Clients → Create client:** type **Desktop app**. No redirect URIs are needed, because desktop clients accept any `http://127.0.0.1` loopback port (the app uses `8085`). Copy the Client ID and Client Secret.
-4. **Browser build only — Credentials → Create credentials → API key:** restrict it to the Picker API. The desktop app doesn't use an API key: it lists spreadsheets from the Drive API in its own dialog, because the Google Picker can't sign in inside an Electron window.
 
 ### Development
 ```bash
 # Configure credentials (see Configuration above)
-cp .env.electron.example .env   # or merge into an existing .env
+cp .env.example .env
 
 # Start Electron in development mode (hot reload for the renderer;
 # restart after changing main/preload code or .env)
 npm run dev
-
-# Or run in browser only (requires web OAuth client in .env)
-cp .env.example .env   # fill in VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY
-npm run dev:web
 ```
 
 ### Linting & Type Checking

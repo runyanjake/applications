@@ -30,8 +30,8 @@ const BASE_URL_HELP: Partial<
 > = {
   anthropic: {
     label: "Base URL",
-    placeholder: "https://your-cors-proxy.example.com",
-    hint: "Anthropic's API does not support browser requests (CORS). Provide a CORS proxy URL that forwards to api.anthropic.com.",
+    placeholder: "https://api.anthropic.com",
+    hint: "Optional. Override to use a proxy or compatible endpoint.",
   },
   openai: {
     label: "Base URL",
@@ -70,7 +70,7 @@ export function LLMProviderCard() {
   const { provider, apiKey, model, baseUrl } = config;
   const isCustom = provider === "custom";
   const baseUrlHelp = BASE_URL_HELP[provider];
-  const baseUrlRequired = provider === "anthropic" || isCustom;
+  const baseUrlRequired = isCustom;
 
   const canSave =
     model.trim().length > 0 &&
@@ -178,16 +178,7 @@ export function LLMProviderCard() {
 
         {baseUrlHelp && (
           <Field
-            label={
-              <>
-                {baseUrlHelp.label}
-                {provider === "anthropic" && (
-                  <span className="ml-1 text-xs font-normal text-red-500">
-                    (required)
-                  </span>
-                )}
-              </>
-            }
+            label={baseUrlHelp.label}
             hint={baseUrlHelp.hint}
           >
             <input

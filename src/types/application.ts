@@ -11,17 +11,8 @@ export const APPLICATION_STATUSES = [
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 
 /**
- * Statuses reachable from each status, used to populate the inline editor.
- *
- * Every status can reach every other one: real job searches go backwards
- * (a "rejected" role reopens, a "ghosted" recruiter replies) and correcting a
- * mistyped status must always be possible. The value of this map is the
- * ordering and the exclusion of the current status, not restriction.
- *
- * Display categories are defined by STATUS_CATEGORY below:
- *   Pre-Interview : bookmarked, applied
- *   Active        : interviewing
- *   Complete      : offered, rejected, withdrawn, ghosted
+ * Inline-editor options per status. Unrestricted on purpose (searches go
+ * backwards, typos need fixing); the map sets ordering and excludes the current status.
  */
 export const STATUS_TRANSITIONS: Record<ApplicationStatus, readonly ApplicationStatus[]> = {
   bookmarked:   ["applied", "interviewing", "offered", "rejected", "withdrawn", "ghosted"],
@@ -110,10 +101,7 @@ export interface Application {
 
 export type ApplicationFormData = Omit<Application, "id" | "lastUpdated" | "history">;
 
-/**
- * The period a view covers. The relative presets are trailing windows ending
- * today; "custom" defers to the explicit dateRange below.
- */
+/** Period a view covers: trailing windows ending today, or "custom" → dateRange. */
 export const DATE_PRESETS = [
   "day",
   "week",

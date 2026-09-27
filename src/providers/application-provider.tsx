@@ -14,7 +14,6 @@ import type {
 import { useStorage } from "../hooks/use-storage";
 import { useAuth } from "../hooks/use-auth";
 import { setGoogleAccessToken } from "../services/auth/access-token";
-import { generateId } from "../utils/id";
 import { sessionGet, sessionRemove, sessionSet } from "../utils/session-store";
 import { describeGoogleError, isAuthError } from "../utils/google-error";
 import { createLogger } from "../utils/logger";
@@ -62,8 +61,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   const [applications, setApplications] = useState<Application[]>(
     () => sessionGet<Application[]>(SESSION_KEY) ?? [],
   );
-  // Shared by every page that shows application data, and persisted so a
-  // refresh does not silently widen the period back out to All Time
+  // Persisted so a reload doesn't reset the period to All Time
   const [filters, setFiltersState] = useState<ApplicationFilters>(
     () => sessionGet<ApplicationFilters>(FILTERS_KEY) ?? { datePreset: "all" },
   );
@@ -129,8 +127,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     isLoadingRef.current = true;
     setLoadError(null);
     try {
-      // The Sheets service reads a module-level token; effects run child-first,
-      // so the AuthProvider above may not have installed it yet.
+      // Effects run child-first; AuthProvider may not have set the token yet
       setGoogleAccessToken(accessToken);
       const apps = await storageService.getAll();
       setApplications(apps);
@@ -151,8 +148,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     }
   }, [isConfigured, storageService, accessToken, spreadsheet?.id, markSynced]);
 
-  // Load when a spreadsheet is selected, and retry once auth is available.
-  // Keyed on the spreadsheet id so a token refresh never discards local edits.
+  // Load on spreadsheet change (retrying once authed); keyed on id so token refreshes keep local edits
   useEffect(() => {
     if (!isConfigured || !spreadsheet) {
       loadedIdRef.current = null;
@@ -161,8 +157,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       sessionRemove(SESSION_KEY);
       setSyncState(INITIAL_SYNC_STATE);
       sessionRemove(SYNC_STATE_KEY);
-      // The filter describes a dataset that no longer exists — drop it here too,
-      // or the next spreadsheet loads behind the previous one's period.
+      // Filters belong to the previous spreadsheet
       setFiltersState({ datePreset: "all" });
       sessionRemove(FILTERS_KEY);
       return;
@@ -229,7 +224,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       const now = new Date().toISOString();
       const app: Application = {
         ...data,
-        id: generateId(),
+        id: crypto.randomUUID(),
         lastUpdated: now,
         history: [{ ts: now, from: null, to: data.status }],
       };
@@ -299,7 +294,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     [persistLocal, maybeAutoSync],
   );
 
-  // Best-effort save of unsynced work when the tab goes away
+  // Best-effort save of unsynced work when the window closes
   useEffect(() => {
     const handler = () => {
       if (!syncRef.current.isDirty || !isConfigured) return;

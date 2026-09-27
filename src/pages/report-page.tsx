@@ -40,9 +40,7 @@ export function ReportPage() {
     getFilteredApplications,
   } = useApplications();
 
-  // Status changes are keyed on lastUpdated, so the period has to be applied to
-  // that date instead of dateApplied — an application sent a year ago can still
-  // have moved this week. Everything else the filters say still holds.
+  // Period applies to lastUpdated, not dateApplied: old applications can still move this week
   const regardlessOfPeriod = useMemo(
     () =>
       getFilteredApplications({
