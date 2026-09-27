@@ -1,32 +1,25 @@
 import { Link } from "react-router-dom";
-import type { Application } from "../../types/application";
+import type { ActivityEvent } from "../../utils/activity";
 import { ROUTES } from "../../config/routes";
 import { formatRelativeDate } from "../../utils/formatters";
-import { isWithinBounds, type DateBounds } from "../../utils/date-range";
 import { StatusBadge } from "../applications/status-badge";
 
 const HEADER_CLASS =
   "px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500";
 
 interface RecentApplicationsProps {
-  applications: Application[];
-  /** The shared period, applied to `lastUpdated` rather than `dateApplied`. */
-  bounds: DateBounds;
+  /** The provider's activity for the shared period, newest first. */
+  activity: ActivityEvent[];
   periodLabel: string;
 }
 
 export function RecentApplications({
-  applications,
-  bounds,
+  activity,
   periodLabel,
 }: RecentApplicationsProps) {
-  // This list is about recent activity, so it keys on when a record last moved
-  const recent = applications
-    .filter((app) => isWithinBounds(app.lastUpdated, bounds))
-    .sort(
-      (a, b) =>
-        new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime(),
-    );
+  // One row per application, at its latest change (activity is newest first)
+  const seen = new Set<string>();
+  const recent = activity.filter(({ app }) => !seen.has(app.id) && seen.add(app.id));
 
   return (
     <div>
@@ -58,7 +51,7 @@ export function RecentApplications({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {recent.map((app) => (
+              {recent.map(({ app, change }) => (
                 <tr key={app.id} className="hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">
                     {app.position}
@@ -70,7 +63,7 @@ export function RecentApplications({
                     <StatusBadge status={app.status} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                    {formatRelativeDate(app.lastUpdated)}
+                    {formatRelativeDate(change.ts)}
                   </td>
                 </tr>
               ))}

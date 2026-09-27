@@ -14,6 +14,7 @@ import { Button } from "../ui/button";
 import { Field, inputClass } from "../ui/field";
 import { StatusOptionGroups } from "./status-options";
 import { LLMFillButton } from "./llm-fill-button";
+import { dayInTimezone } from "../../utils/date-range";
 
 interface ApplicationFormProps {
   onSubmit: (data: ApplicationFormData) => Promise<void>;
@@ -23,7 +24,7 @@ interface ApplicationFormProps {
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return dayInTimezone();
 }
 
 function emptyForm(): ApplicationFormData {

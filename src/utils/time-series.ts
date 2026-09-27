@@ -15,6 +15,7 @@ import {
   type HistoryEntry,
 } from "../types/application";
 import type { StatusTimelinePoint } from "../types/chart";
+import { historyOf } from "./activity";
 
 /**
  * Status counts over time, downsampled from each application's history log.
@@ -75,16 +76,9 @@ const BUCKET: Record<
 };
 
 function collectEvents(applications: Application[]): HistoryEntry[] {
-  const events: HistoryEntry[] = [];
-  for (const app of applications) {
-    // `history` is absent on records restored from an older session payload
-    const history = app.history ?? [];
-    if (history.length > 0) events.push(...history);
-    // Legacy application with no history: treat it as a single creation event
-    else events.push({ ts: app.lastUpdated, from: null, to: app.status });
-  }
   // A missing or unparseable timestamp would land in an arbitrary bucket
-  return events
+  return applications
+    .flatMap(historyOf)
     .filter((event) => event.ts && !Number.isNaN(Date.parse(event.ts)))
     .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
 }

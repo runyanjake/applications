@@ -19,6 +19,7 @@ import { describeGoogleError, isAuthError } from "../utils/google-error";
 import { createLogger } from "../utils/logger";
 import { matchesFilters } from "../utils/filter-applications";
 import { resolveDateBounds } from "../utils/date-range";
+import { collectActivity } from "../utils/activity";
 import {
   computeVersion,
   shouldAutoSync,
@@ -32,6 +33,8 @@ const log = createLogger("sync");
 const audit = createLogger("applications");
 
 const SESSION_KEY = "applications";
+/** Spreadsheet the cached applications belong to. */
+const SESSION_SHEET_KEY = "applications-sheet";
 const SYNC_STATE_KEY = "sync-state";
 const FILTERS_KEY = "filters";
 
@@ -77,7 +80,9 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   /** Spreadsheet id whose contents are already loaded, so we load once each. */
   const loadedIdRef = useRef<string | null>(null);
 
+  const sheetIdRef = useRef<string | null>(null);
   appsRef.current = applications;
+  sheetIdRef.current = spreadsheet?.id ?? null;
   syncRef.current = syncState;
   isLoadingRef.current = isLoading;
 
@@ -85,6 +90,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     (apps: Application[], markDirty: boolean) => {
       setApplications(apps);
       sessionSet(SESSION_KEY, apps);
+      sessionSet(SESSION_SHEET_KEY, sheetIdRef.current);
       if (!markDirty) return;
       setSyncState((prev) => {
         const next: SyncState = {
@@ -132,6 +138,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       const apps = await storageService.getAll();
       setApplications(apps);
       sessionSet(SESSION_KEY, apps);
+      sessionSet(SESSION_SHEET_KEY, spreadsheet?.id ?? null);
       markSynced(apps);
       loadedIdRef.current = spreadsheet?.id ?? null;
       audit.audit("applications.loaded", {
@@ -147,25 +154,6 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       isLoadingRef.current = false;
     }
   }, [isConfigured, storageService, accessToken, spreadsheet?.id, markSynced]);
-
-  // Load on spreadsheet change (retrying once authed); keyed on id so token refreshes keep local edits
-  useEffect(() => {
-    if (!isConfigured || !spreadsheet) {
-      loadedIdRef.current = null;
-      setApplications([]);
-      setLoadError(null);
-      sessionRemove(SESSION_KEY);
-      setSyncState(INITIAL_SYNC_STATE);
-      sessionRemove(SYNC_STATE_KEY);
-      // Filters belong to the previous spreadsheet
-      setFiltersState({ datePreset: "all" });
-      sessionRemove(FILTERS_KEY);
-      return;
-    }
-    if (!accessToken) return; // not signed in yet — this effect re-runs when it is
-    if (loadedIdRef.current === spreadsheet.id) return;
-    void loadFromRemote();
-  }, [isConfigured, spreadsheet, accessToken, loadFromRemote]);
 
   /** Push local state to the sheet, refusing to clobber remote edits. */
   const sync = useCallback(async () => {
@@ -214,6 +202,38 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       setSyncFailure("error", describeLoadFailure(err));
     }
   }, [isConfigured, storageService, markSynced, setSyncFailure]);
+
+  // Load on spreadsheet change (retrying once authed); keyed on id so token refreshes keep local edits
+  useEffect(() => {
+    if (!isConfigured || !spreadsheet) {
+      loadedIdRef.current = null;
+      setApplications([]);
+      setLoadError(null);
+      sessionRemove(SESSION_KEY);
+      sessionRemove(SESSION_SHEET_KEY);
+      setSyncState(INITIAL_SYNC_STATE);
+      sessionRemove(SYNC_STATE_KEY);
+      // Filters belong to the previous spreadsheet
+      setFiltersState({ datePreset: "all" });
+      sessionRemove(FILTERS_KEY);
+      return;
+    }
+    if (!accessToken) return; // not signed in yet — this effect re-runs when it is
+    if (loadedIdRef.current === spreadsheet.id) return;
+    // A window reload (including dev hot reload) must not replace unsynced edits:
+    // keep them and push, which still refuses to clobber a changed sheet
+    if (
+      syncRef.current.isDirty &&
+      sessionGet<string>(SESSION_SHEET_KEY) === spreadsheet.id
+    ) {
+      loadedIdRef.current = spreadsheet.id;
+      log.info("Kept unsynced local changes across reload; syncing");
+      setGoogleAccessToken(accessToken);
+      void sync();
+      return;
+    }
+    void loadFromRemote();
+  }, [isConfigured, spreadsheet, accessToken, loadFromRemote, sync]);
 
   const maybeAutoSync = useCallback(() => {
     if (shouldAutoSync(syncRef.current)) void sync();
@@ -306,14 +326,6 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isConfigured, storageService]);
 
-  const getFilteredApplications = useCallback(
-    (query: ApplicationFilters) => {
-      const bounds = resolveDateBounds(query);
-      return applications.filter((app) => matchesFilters(app, query, bounds));
-    },
-    [applications],
-  );
-
   const setFilters = useCallback((next: ApplicationFilters) => {
     setFiltersState(next);
     sessionSet(FILTERS_KEY, next);
@@ -324,6 +336,17 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
   const filteredApplications = useMemo(
     () => applications.filter((app) => matchesFilters(app, filters, dateBounds)),
     [applications, filters, dateBounds],
+  );
+
+  const applicationsIgnoringPeriod = useMemo(
+    () => applications.filter((app) => matchesFilters(app, filters, {})),
+    [applications, filters],
+  );
+
+  // Old applications can still move this period, so activity starts from the unperioded set
+  const activity = useMemo(
+    () => collectActivity(applicationsIgnoringPeriod, dateBounds),
+    [applicationsIgnoringPeriod, dateBounds],
   );
 
   const value = useMemo(
@@ -341,8 +364,8 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       filters,
       setFilters,
       filteredApplications,
-      dateBounds,
-      getFilteredApplications,
+      applicationsIgnoringPeriod,
+      activity,
     }),
     [
       applications,
@@ -358,8 +381,8 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
       filters,
       setFilters,
       filteredApplications,
-      dateBounds,
-      getFilteredApplications,
+      applicationsIgnoringPeriod,
+      activity,
     ],
   );
 

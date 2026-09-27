@@ -4,7 +4,7 @@ import type {
   ApplicationFilters,
   ApplicationFormData,
 } from "../types/application";
-import type { DateBounds } from "../utils/date-range";
+import type { ActivityEvent } from "../utils/activity";
 import type { SyncState } from "../utils/sync";
 
 export interface ApplicationContextValue {
@@ -22,11 +22,17 @@ export interface ApplicationContextValue {
   /** Shared across pages so a chosen period carries over. */
   filters: ApplicationFilters;
   setFilters: (filters: ApplicationFilters) => void;
-  /** `applications` narrowed by `filters` — what pages should render. */
+  /*
+   * Every page reads these rather than filtering `applications` itself, so all
+   * views agree. The period applies to `dateApplied` for applications and to
+   * the change date for activity.
+   */
+  /** `applications` narrowed by `filters`, period included. */
   filteredApplications: Application[];
-  /** `filters`' period as concrete days, for views keyed on other dates. */
-  dateBounds: DateBounds;
-  getFilteredApplications: (filters: ApplicationFilters) => Application[];
+  /** `applications` narrowed by every filter except the period: current state. */
+  applicationsIgnoringPeriod: Application[];
+  /** Status changes inside the period (new applications included), newest first. */
+  activity: ActivityEvent[];
 }
 
 export const ApplicationContext = createContext<ApplicationContextValue | null>(

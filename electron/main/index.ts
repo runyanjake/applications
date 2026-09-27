@@ -1,12 +1,13 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   IpcMainInvokeEvent,
   session,
   shell,
 } from "electron";
-import { join } from "path";
+import { basename, join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import {
@@ -294,6 +295,31 @@ function registerIpcHandlers(): void {
         const detail = cause?.code ?? cause?.message;
         throw new Error(`${err instanceof Error ? err.message : String(err)}${detail ? ` (${detail})` : ""}`);
       }
+    }
+  );
+
+  // Report: pick a path (starting in Downloads), then render the page's print view to PDF
+  ipcMain.handle(
+    "report:save-pdf",
+    async (event: IpcMainInvokeEvent, fileName: string): Promise<string | null> => {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const options = {
+        defaultPath: join(app.getPath("downloads"), basename(fileName)),
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      };
+      const { canceled, filePath } = window
+        ? await dialog.showSaveDialog(window, options)
+        : await dialog.showSaveDialog(options);
+      if (canceled || !filePath) return null;
+
+      // Matches the report's on-screen width (7.7in = Letter minus these margins)
+      const pdf = await event.sender.printToPDF({
+        printBackground: true,
+        pageSize: "Letter",
+        margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+      });
+      writeFileSync(filePath, pdf);
+      return filePath;
     }
   );
 

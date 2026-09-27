@@ -58,6 +58,10 @@ export interface ElectronAPI {
   llm: {
     request: (req: ElectronLlmRequest) => Promise<ElectronLlmResponse>;
   };
+  report: {
+    /** Resolves to the saved path, or null if the user cancelled. */
+    savePdf: (fileName: string) => Promise<string | null>;
+  };
   storage: {
     saveSpreadsheetInfo: (info: ElectronSpreadsheetInfo) => void;
     loadSpreadsheetInfo: () => ElectronSpreadsheetInfo | null;

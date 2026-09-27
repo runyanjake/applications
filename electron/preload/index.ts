@@ -57,6 +57,10 @@ export interface ElectronAPI {
   llm: {
     request: (req: LlmRequest) => Promise<LlmResponse>;
   };
+  report: {
+    /** Resolves to the saved path, or null if the user cancelled. */
+    savePdf: (fileName: string) => Promise<string | null>;
+  };
   storage: {
     saveSpreadsheetInfo: (info: SpreadsheetInfo) => void;
     loadSpreadsheetInfo: () => SpreadsheetInfo | null;
@@ -76,6 +80,9 @@ const electronAPI: ElectronAPI = {
   },
   llm: {
     request: (req: LlmRequest) => ipcRenderer.invoke("llm:request", req),
+  },
+  report: {
+    savePdf: (fileName: string) => ipcRenderer.invoke("report:save-pdf", fileName),
   },
   storage: {
     saveSpreadsheetInfo: (info: SpreadsheetInfo) =>

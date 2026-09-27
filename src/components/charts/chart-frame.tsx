@@ -31,7 +31,7 @@ export function ChartFrame({
   return (
     <div>
       {title && (
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
+        <h2 className="mb-2 text-sm font-semibold text-gray-700">{title}</h2>
       )}
       {caption && <p className="mb-3 text-xs text-gray-400">{caption}</p>}
       <ReactECharts option={option} style={{ height }} notMerge />
@@ -50,7 +50,7 @@ export function ChartPlaceholder({
   return (
     <div>
       {title && (
-        <h3 className="mb-2 text-sm font-semibold text-gray-700">{title}</h3>
+        <h2 className="mb-2 text-sm font-semibold text-gray-700">{title}</h2>
       )}
       <p className="text-sm text-gray-400">{message}</p>
     </div>

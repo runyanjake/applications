@@ -149,7 +149,7 @@ export function StatusTimelineChart({
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         {title && (
-          <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+          <h2 className="text-sm font-semibold text-gray-700">{title}</h2>
         )}
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedControl

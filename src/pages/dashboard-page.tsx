@@ -8,7 +8,7 @@ import { RecentApplications } from "../components/dashboard/recent-applications"
 import { describeDateRange } from "../utils/date-range";
 
 export function DashboardPage() {
-  const { applications, filters, setFilters, filteredApplications, dateBounds } =
+  const { applications, filters, setFilters, filteredApplications, activity } =
     useApplications();
 
   return (
@@ -41,8 +41,7 @@ export function DashboardPage() {
           <SummaryCards applications={filteredApplications} />
           <div className="mt-8">
             <RecentApplications
-              applications={filteredApplications}
-              bounds={dateBounds}
+              activity={activity}
               periodLabel={describeDateRange(filters)}
             />
           </div>

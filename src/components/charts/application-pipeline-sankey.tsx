@@ -61,11 +61,15 @@ function buildOption(applications: Application[], interactive: boolean) {
   if (links.length === 0) return null;
 
   return {
+    // Static on the report: PDF export would capture a half-drawn entrance animation
+    animation: interactive,
     tooltip: { trigger: "item" },
     series: [
       {
         type: "sankey",
         layout: "none",
+        // Fixed room for the longest label ("Awaiting Response"); the 20% default clips on narrow widths
+        right: 130,
         draggable: interactive,
         emphasis: interactive ? { focus: "adjacency" } : { disabled: true },
         data: Object.values(NODES).map((node) => ({

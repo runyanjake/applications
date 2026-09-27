@@ -1,4 +1,5 @@
 import type { ApplicationFilters, DatePreset } from "../types/application";
+import { getTimezone } from "./timezone-store";
 
 /** Trailing window length, in days, for each relative preset. */
 const PRESET_DAYS: Record<Exclude<DatePreset, "all" | "custom">, number> = {
@@ -37,9 +38,10 @@ export interface DateBounds {
   to?: string;
 }
 
-/** The calendar day a timestamp falls on, matching the form's `dateApplied`. */
-function toDay(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
+/** YYYY-MM-DD of an instant in the user's timezone, matching the form's `dateApplied`. */
+export function dayInTimezone(ms: number = Date.now()): string {
+  // en-CA formats as YYYY-MM-DD
+  return new Intl.DateTimeFormat("en-CA", { timeZone: getTimezone() }).format(ms);
 }
 
 export function datePresetOf(filters: ApplicationFilters): DatePreset {
@@ -61,15 +63,15 @@ export function resolveDateBounds(
   }
   // Trailing window ending today, with both ends inclusive
   return {
-    from: toDay(now - (PRESET_DAYS[preset] - 1) * DAY_MS),
-    to: toDay(now),
+    from: dayInTimezone(now - (PRESET_DAYS[preset] - 1) * DAY_MS),
+    to: dayInTimezone(now),
   };
 }
 
-/** True when a YYYY-MM-DD date or ISO timestamp falls inside the bounds. */
+/** True when a YYYY-MM-DD date, or an ISO timestamp's day in the user's timezone, falls inside the bounds. */
 export function isWithinBounds(date: string, bounds: DateBounds): boolean {
   if (!date) return false;
-  const day = date.slice(0, 10);
+  const day = date.length > 10 ? dayInTimezone(Date.parse(date)) : date;
   if (bounds.from && day < bounds.from) return false;
   if (bounds.to && day > bounds.to) return false;
   return true;
