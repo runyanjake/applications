@@ -1,5 +1,5 @@
 import type { ApplicationFormData } from "../../types/application";
-import type { LLMConfig, LLMModel } from "../../types/llm";
+import { REQUIREMENT_CATEGORIES, type LLMConfig, type LLMModel } from "../../types/llm";
 import { GeminiLLMService } from "./gemini-llm-service";
 import { OpenAILLMService } from "./openai-llm-service";
 import { AnthropicLLMService } from "./anthropic-llm-service";
@@ -62,6 +62,21 @@ export function toBulletList(notes: string): string {
     .join("\n");
 }
 
+/** Summary line, then one "Category: a, b" line per category in the fixed order. */
+function buildNotes(summary: unknown, requirements: unknown): string {
+  const byCategory = new Map<string, string[]>();
+  for (const group of Array.isArray(requirements) ? requirements : []) {
+    if (typeof group?.category !== "string" || !Array.isArray(group.items)) continue;
+    const items = group.items.filter((i: unknown): i is string => typeof i === "string");
+    byCategory.set(group.category, [...(byCategory.get(group.category) ?? []), ...items]);
+  }
+  const lines = REQUIREMENT_CATEGORIES.flatMap((category) => {
+    const items = [...new Set(byCategory.get(category)?.map((i) => i.trim()).filter(Boolean))];
+    return items.length > 0 ? [`${category}: ${items.join(", ")}`] : [];
+  });
+  return toBulletList([typeof summary === "string" ? summary : "", ...lines].join("\n"));
+}
+
 /** Parse model output (code fences allowed) into partial form data. */
 export function parseExtractedJSON(
   text: string,
@@ -101,7 +116,7 @@ export function parseExtractedJSON(
 
   const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
-  // Keep only known keys that arrived with the expected type
+  // Keep only known keys that arrived with the expected type (nulls drop out)
   const result: Partial<ApplicationFormData> = {};
   const copyIfType = <K extends keyof ApplicationFormData>(
     key: K,
@@ -117,28 +132,26 @@ export function parseExtractedJSON(
     "companyName",
     "companyWebsite",
     "jobPostingUrl",
-    "city",
-    "state",
-    "country",
     "currency",
   ] as const) {
     copyIfType(key, "string");
   }
-  // Notes may arrive as an array of bullets despite the schema
-  if (Array.isArray(parsed.notes)) {
-    parsed.notes = parsed.notes.filter((n) => typeof n === "string").join("\n");
-  }
-  copyIfType("notes", "string");
+  const notes = buildNotes(parsed.summary, parsed.requirements);
+  if (notes) result.notes = notes;
   copyIfType("remote", "boolean");
   copyIfType("salaryMin", "number");
   copyIfType("salaryMax", "number");
-  // Replace the raw location fields with their cleaned, de-duplicated form
-  const { city, state, country } = result;
-  delete result.city;
-  delete result.state;
-  delete result.country;
-  Object.assign(result, normalizeLocation({ city, state, country }));
-  if (result.notes) result.notes = toBulletList(result.notes);
+  // Models name a currency for unpaid postings despite the prompt
+  if (result.salaryMin == null && result.salaryMax == null) delete result.currency;
+  // One {city, state, country} per place → the sheet's three comma-separated columns
+  const locations = (Array.isArray(parsed.locations) ? parsed.locations : [])
+    .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null);
+  const column = (key: string) =>
+    locations.map((l) => (typeof l[key] === "string" ? l[key] : "")).join(", ");
+  Object.assign(
+    result,
+    normalizeLocation({ city: column("city"), state: column("state"), country: column("country") }),
+  );
 
   log.debug("Parsed result:", result);
 

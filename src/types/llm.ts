@@ -31,3 +31,17 @@ export interface LLMModel {
   /** Short status such as "loaded" / "not loaded" for self-hosted servers. */
   detail?: string;
 }
+
+/** Notes group a posting's requirements under these headings, in this order. */
+export const REQUIREMENT_CATEGORIES = [
+  "Languages",
+  "Frameworks",
+  "Cloud",
+  "Databases",
+  "Data & Streaming",
+  "CI/CD & Infrastructure",
+  "AI/ML",
+  "Other Software",
+  "Certifications & Clearance",
+  "Domain Knowledge",
+] as const;

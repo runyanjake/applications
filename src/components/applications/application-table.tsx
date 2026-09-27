@@ -14,6 +14,7 @@ import { StatusBadge } from "./status-badge";
 import { InterestBadge } from "./interest-badge";
 import { StatusSelect } from "./status-select";
 import { ApplicationForm } from "./application-form";
+import { TruncatedText } from "../ui/truncated-text";
 
 type SortField = "position" | "companyName" | "status" | "lastUpdated";
 type SortDir = "asc" | "desc";
@@ -29,13 +30,11 @@ function formatLocation(app: Application): string {
   return parts.join(", ") || "—";
 }
 
-/** Cell whose content is clipped but readable via its tooltip. */
+/** Cell whose content is clipped but readable on hover. */
 function TruncatedCell({ text, className = "" }: { text: string; className?: string }) {
   return (
     <td className="px-3 py-3">
-      <span className={`block truncate text-sm ${className}`} title={text}>
-        {text}
-      </span>
+      <TruncatedText text={text} className={`text-sm ${className}`} />
     </td>
   );
 }
@@ -129,12 +128,10 @@ export function ApplicationTable({
               <tr className="hover:bg-gray-50">
                 <td className="px-3 py-3">
                   <div className="flex min-w-0 items-center gap-1">
-                    <span
-                      className="truncate text-sm font-medium text-gray-900"
-                      title={app.position}
-                    >
-                      {app.position}
-                    </span>
+                    <TruncatedText
+                      text={app.position}
+                      className="text-sm font-medium text-gray-900"
+                    />
                     {app.jobPostingUrl && (
                       <ExternalLink
                         href={app.jobPostingUrl}
@@ -143,12 +140,10 @@ export function ApplicationTable({
                     )}
                   </div>
                   <div className="flex min-w-0 items-center gap-1">
-                    <span
-                      className="truncate text-xs text-gray-500"
-                      title={app.companyName}
-                    >
-                      {app.companyName}
-                    </span>
+                    <TruncatedText
+                      text={app.companyName}
+                      className="text-xs text-gray-500"
+                    />
                     {app.companyWebsite && (
                       <ExternalLink
                         href={app.companyWebsite}
@@ -185,11 +180,12 @@ export function ApplicationTable({
                   )}
                 </td>
 
-                <td
-                  className="px-3 py-3 text-sm text-gray-500"
-                  title={formatDateTime(app.lastUpdated)}
-                >
-                  {formatRelativeDate(app.lastUpdated)}
+                <td className="px-3 py-3">
+                  <TruncatedText
+                    text={formatRelativeDate(app.lastUpdated)}
+                    tooltip={formatDateTime(app.lastUpdated)}
+                    className="text-sm text-gray-500"
+                  />
                 </td>
 
                 <TruncatedCell text={app.notes || "—"} className="text-gray-500" />

@@ -1,5 +1,5 @@
 import type { ApplicationFormData } from "../../types/application";
-import type { LLMConfig, LLMModel } from "../../types/llm";
+import { REQUIREMENT_CATEGORIES, type LLMConfig, type LLMModel } from "../../types/llm";
 import type { LLMService } from "./llm-service";
 import { MAX_OUTPUT_TOKENS, parseExtractedJSON, postingMessage, truncatedError } from "./llm-service";
 import { getJson, postJson, requireText, sortModels } from "./llm-http";
@@ -7,56 +7,62 @@ import systemPrompt from "../../prompts/extract-job-posting.md?raw";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "INR", "OTHER"];
 
-/** The keys the prompt asks for, and nothing else. */
-const FIELDS: Record<string, { type: string; enum?: string[] }> = {
-  position: { type: "string" },
-  companyName: { type: "string" },
-  companyWebsite: { type: "string" },
-  jobPostingUrl: { type: "string" },
-  city: { type: "string" },
-  state: { type: "string" },
-  country: { type: "string" },
-  remote: { type: "boolean" },
-  salaryMin: { type: "number" },
-  salaryMax: { type: "number" },
-  currency: { type: "string", enum: CURRENCIES },
-  notes: { type: "string" },
-};
-
-// Must match the "Always include" keys in the prompt
-const ALWAYS_PRESENT = ["position", "companyName", "companyWebsite", "notes"];
+const nullable = (type: string) => ({ type: [type, "null"] });
 
 /**
- * Structured-output schema (stops invented keys). OpenAI strict mode needs every
- * key required, so optionals are nullable there (nulls dropped on parse). Local
- * servers get plain types: LM Studio ignored the nullable form.
+ * Every key required and nullable, in prompt order with the long fields last:
+ * optional keys come after required ones in grammar-constrained output, and
+ * models closed the object after long notes instead of filling them.
  */
-function responseFormat(selfHosted: boolean) {
-  const properties = Object.fromEntries(
-    Object.entries(FIELDS).map(([key, field]) => [
-      key,
-      selfHosted || ALWAYS_PRESENT.includes(key)
-        ? field
-        : {
-            type: [field.type, "null"],
-            ...(field.enum && { enum: [...field.enum, null] }),
-          },
-    ]),
-  );
-  return {
-    type: "json_schema",
-    json_schema: {
-      name: "job_posting_extraction",
-      strict: true,
-      schema: {
+const SCHEMA = {
+  type: "object",
+  properties: {
+    position: { type: "string" },
+    companyName: { type: "string" },
+    companyWebsite: { type: "string" },
+    jobPostingUrl: nullable("string"),
+    locations: {
+      type: "array",
+      items: {
         type: "object",
-        properties,
-        required: selfHosted ? ALWAYS_PRESENT : Object.keys(FIELDS),
+        properties: {
+          city: nullable("string"),
+          state: nullable("string"),
+          country: nullable("string"),
+        },
+        required: ["city", "state", "country"],
         additionalProperties: false,
       },
     },
-  };
-}
+    remote: nullable("boolean"),
+    salaryMin: nullable("number"),
+    salaryMax: nullable("number"),
+    currency: { type: ["string", "null"], enum: [...CURRENCIES, null] },
+    summary: { type: "string" },
+    requirements: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          category: { type: "string", enum: REQUIREMENT_CATEGORIES },
+          items: { type: "array", items: { type: "string" } },
+        },
+        required: ["category", "items"],
+        additionalProperties: false,
+      },
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+const RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "job_posting_extraction",
+    strict: true,
+    schema: { ...SCHEMA, required: Object.keys(SCHEMA.properties) },
+  },
+};
 
 /** OpenAI's list includes image, audio, embedding and moderation models. */
 const NON_CHAT_MODEL =
@@ -114,7 +120,7 @@ export class OpenAILLMService implements LLMService {
           { role: "system", content: systemPrompt },
           { role: "user", content: postingMessage(input) },
         ],
-        response_format: responseFormat(this.selfHosted),
+        response_format: RESPONSE_FORMAT,
         // Local only: OpenAI rejects unknown params and non-default temperature on reasoning models.
         // reasoning_effort "none" disables thinking in LM Studio; vLLM/llama.cpp read chat_template_kwargs.
         ...(this.selfHosted && {
