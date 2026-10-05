@@ -3,7 +3,12 @@ import { useApplications } from "../hooks/use-applications";
 import { ACTIVE_STATUSES, COMPLETE_STATUSES } from "../types/application";
 import { formatDate } from "../utils/formatters";
 import { getTimezone } from "../utils/timezone-store";
-import { dayInTimezone, describeDateRange } from "../utils/date-range";
+import {
+  dayInTimezone,
+  describeDateRange,
+  isWithinBounds,
+  resolveDateBounds,
+} from "../utils/date-range";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { PageHeader } from "../components/ui/page-header";
@@ -46,22 +51,26 @@ export function ReportPage() {
     activity,
   } = useApplications();
 
-  const stats = useMemo(
-    () => ({
+  const stats = useMemo(() => {
+    const bounds = resolveDateBounds(filters);
+    return {
       // Current state, so the period doesn't hide ongoing interviews
       active: applicationsIgnoringPeriod.filter((app) =>
         ACTIVE_STATUSES.includes(app.status),
       ),
-      sent: filteredApplications.filter(
-        (app) => app.status !== "bookmarked" && app.dateApplied,
+      // By applied date: the period filter follows the latest change, not when it was sent
+      sent: applicationsIgnoringPeriod.filter(
+        (app) =>
+          app.status !== "bookmarked" &&
+          app.dateApplied &&
+          isWithinBounds(app.dateApplied, bounds),
       ),
       transitioned: activity.filter(
         ({ change }) =>
           ACTIVE_STATUSES.includes(change.to) || COMPLETE_STATUSES.includes(change.to),
       ),
-    }),
-    [filteredApplications, applicationsIgnoringPeriod, activity],
-  );
+    };
+  }, [filters, applicationsIgnoringPeriod, activity]);
   const nothingMatches =
     stats.active.length === 0 &&
     stats.sent.length === 0 &&

@@ -15,6 +15,20 @@ export function historyOf(app: Application): HistoryEntry[] {
     : [{ ts: app.lastUpdated, from: null, to: app.status }];
 }
 
+/** Timestamp of the latest status change, or "" when none parses. */
+export function lastEventTs(app: Application): string {
+  let latest = "";
+  let latestMs = -Infinity;
+  for (const { ts } of historyOf(app)) {
+    const ms = Date.parse(ts);
+    if (ms > latestMs) {
+      latest = ts;
+      latestMs = ms;
+    }
+  }
+  return latest;
+}
+
 /** Every status change inside the bounds, newest first. Unparseable timestamps are dropped. */
 export function collectActivity(
   applications: Application[],

@@ -1,5 +1,6 @@
 import type { Application, ApplicationFilters } from "../types/application";
-import type { DateBounds } from "./date-range";
+import { isWithinBounds, type DateBounds } from "./date-range";
+import { lastEventTs } from "./activity";
 
 function includesText(haystack: string, needle: string): boolean {
   return haystack.toLowerCase().includes(needle.toLowerCase());
@@ -23,10 +24,8 @@ export function matchesFilters(
   if (filters.remote != null && app.remote !== filters.remote) {
     return false;
   }
-  if (bounds.from && app.dateApplied < bounds.from) {
-    return false;
-  }
-  if (bounds.to && app.dateApplied > bounds.to) {
+  // The period follows the latest status change, so recent moves on old applications count
+  if ((bounds.from || bounds.to) && !isWithinBounds(lastEventTs(app), bounds)) {
     return false;
   }
   if (filters.search) {

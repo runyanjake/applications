@@ -24,8 +24,8 @@ export interface ApplicationContextValue {
   setFilters: (filters: ApplicationFilters) => void;
   /*
    * Every page reads these rather than filtering `applications` itself, so all
-   * views agree. The period applies to `dateApplied` for applications and to
-   * the change date for activity.
+   * views agree. The period applies to the latest status change for
+   * applications and to the change date for activity.
    */
   /** `applications` narrowed by `filters`, period included. */
   filteredApplications: Application[];
