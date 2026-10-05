@@ -13,7 +13,8 @@
     "package:win": "electron-vite build && electron-builder --win",
     "package:linux": "electron-vite build && electron-builder --linux",
     "lint": "eslint .",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "postinstall": "install-electron"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -42,5 +43,8 @@
     "typescript": "~5.7.0",
     "typescript-eslint": "^8.18.0",
     "vite": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

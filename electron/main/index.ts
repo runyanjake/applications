@@ -182,7 +182,13 @@ function registerIpcHandlers(): void {
       redirectPort: OAUTH_REDIRECT_PORT,
     };
 
-    const tokens: TokenResponse = await startOAuthServer(config);
+    const tokens: TokenResponse = await startOAuthServer(
+      config,
+      (level, message) =>
+        logger.log([
+          { ts: new Date().toISOString(), level, scope: "oauth", message },
+        ])
+    );
 
     // Fetch user info
     const userInfo = await fetchUserInfo(tokens.access_token);

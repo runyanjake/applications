@@ -19,6 +19,8 @@ export interface TokenResponse {
   token_type: string;
 }
 
+export type OAuthLog = (level: "info" | "warn" | "error", message: string) => void;
+
 // Give up on a login the user abandoned in the browser
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -26,8 +28,14 @@ let server: Server | null = null;
 let loginTimeout: NodeJS.Timeout | null = null;
 let rejectPending: ((err: Error) => void) | null = null;
 
-export function startOAuthServer(config: OAuthConfig): Promise<TokenResponse> {
+export function startOAuthServer(
+  config: OAuthConfig,
+  log: OAuthLog
+): Promise<TokenResponse> {
   // A previous attempt may still hold the port if its browser tab was abandoned
+  if (rejectPending) {
+    log("warn", "Previous sign-in attempt superseded by a new one");
+  }
   rejectPending?.(new Error("Superseded by a new sign-in attempt"));
   stopOAuthServer();
 
@@ -36,6 +44,7 @@ export function startOAuthServer(config: OAuthConfig): Promise<TokenResponse> {
     const redirectUri = `http://127.0.0.1:${config.redirectPort}/callback`;
 
     loginTimeout = setTimeout(() => {
+      log("warn", "Sign-in timed out waiting for the browser callback");
       stopOAuthServer();
       reject(new Error("Sign-in timed out. Please try again."));
     }, LOGIN_TIMEOUT_MS);
@@ -45,6 +54,10 @@ export function startOAuthServer(config: OAuthConfig): Promise<TokenResponse> {
         const url = new URL(
           req.url!,
           `http://127.0.0.1:${config.redirectPort}`
+        );
+        log(
+          "info",
+          `Loopback request received: ${req.method} ${url.pathname} (code: ${url.searchParams.has("code")}, error: ${url.searchParams.get("error") ?? "none"})`
         );
 
         if (url.pathname === "/callback") {
@@ -68,6 +81,7 @@ export function startOAuthServer(config: OAuthConfig): Promise<TokenResponse> {
                 config,
                 redirectUri
               );
+              log("info", "Token exchange succeeded");
               res.writeHead(200, { "Content-Type": "text/html" });
               res.end(
                 "<html><body><h1>Authentication successful!</h1><p>You can close this window.</p></body></html>"
@@ -75,6 +89,10 @@ export function startOAuthServer(config: OAuthConfig): Promise<TokenResponse> {
               stopOAuthServer();
               resolve(tokens);
             } catch (err) {
+              log(
+                "error",
+                `Token exchange failed: ${err instanceof Error ? err.message : String(err)}`
+              );
               res.writeHead(500, { "Content-Type": "text/html" });
               res.end(
                 "<html><body><h1>Token exchange failed</h1></body></html>"
@@ -97,11 +115,19 @@ export function startOAuthServer(config: OAuthConfig): Promise<TokenResponse> {
       authUrl.searchParams.set("access_type", "offline");
       authUrl.searchParams.set("prompt", "consent");
 
-      // Open in system browser
-      shell.openExternal(authUrl.toString());
+      log("info", `Loopback server listening on ${redirectUri}; opening system browser`);
+      shell.openExternal(authUrl.toString()).then(
+        () => log("info", "System browser accepted the sign-in URL"),
+        (err) =>
+          log(
+            "error",
+            `System browser failed to open the sign-in URL: ${err instanceof Error ? err.message : String(err)}`
+          )
+      );
     });
 
     server.on("error", (err) => {
+      log("error", `Loopback server error: ${err.message}`);
       stopOAuthServer();
       reject(err);
     });
