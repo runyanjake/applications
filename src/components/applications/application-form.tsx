@@ -41,7 +41,7 @@ function emptyForm(): ApplicationFormData {
     currency: "USD",
     jobPostingUrl: "",
     interest: "medium",
-    status: "applied",
+    status: "bookmarked",
     notes: "",
     dateApplied: today(),
   };
