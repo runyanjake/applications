@@ -18,27 +18,32 @@ import type { StatusTimelinePoint } from "../types/chart";
 import { historyOf } from "./activity";
 
 /**
- * Status counts over time, downsampled from each application's history log.
- * - interval: day | week | month, calendar-aligned in the user's timezone (DST-safe)
- * - agg: last (end of bucket) | max (peak in bucket) | entered (transitions in)
- * - fill: carry forward through empty buckets
+ * Status counts over time, from each application's history log.
+ * - counts: exact, one point per status change (no periodic sampling)
+ * - entered: transitions into each status per day | week | month, calendar-aligned
+ *   in the user's timezone (DST-safe)
  */
 
 export type SeriesInterval = "auto" | "day" | "week" | "month";
 export type ResolvedInterval = Exclude<SeriesInterval, "auto">;
 
-export type SeriesAggregator = "last" | "max" | "entered";
+/** A status's count after each change to it, as [epoch ms, count]; 0 before the first. */
+export type StatusChanges = [number, number][];
 
-export interface StatusSeriesQuery {
+export interface StatusCounts {
+  startMs: number;
+  endMs: number;
+  changes: Partial<Record<ApplicationStatus, StatusChanges>>;
+}
+
+export interface EnteredQuery {
   interval: SeriesInterval;
-  aggregator: SeriesAggregator;
   timeZone: string;
   now?: number;
 }
 
-export interface StatusSeries {
+export interface EnteredSeries {
   interval: ResolvedInterval;
-  aggregator: SeriesAggregator;
   /** One point per bucket; `ts` is the bucket start. */
   points: StatusTimelinePoint[];
 }
@@ -95,10 +100,63 @@ export function resolveInterval(
   return "month";
 }
 
-export function buildStatusSeries(
+export function buildStatusCounts(
   applications: Application[],
-  { interval, aggregator, timeZone, now = Date.now() }: StatusSeriesQuery,
-): StatusSeries | null {
+  now = Date.now(),
+): StatusCounts | null {
+  const events = collectEvents(applications);
+  if (events.length === 0) return null;
+
+  const current = zeroCounts();
+  const changes: StatusCounts["changes"] = {};
+  let ms = 0;
+
+  for (let i = 0; i < events.length; ) {
+    ms = Date.parse(events[i]!.ts);
+    const touched = new Set<ApplicationStatus>();
+
+    // Simultaneous events collapse into one point per status
+    for (; i < events.length && Date.parse(events[i]!.ts) === ms; i++) {
+      const { from, to } = events[i]!;
+      if (from !== null) {
+        current[from]--;
+        touched.add(from);
+      }
+      current[to]++;
+      touched.add(to);
+    }
+
+    for (const status of touched) {
+      const list = (changes[status] ??= []);
+      if ((list[list.length - 1]?.[1] ?? 0) !== current[status]) {
+        list.push([ms, current[status]]);
+      }
+    }
+  }
+
+  return {
+    startMs: Date.parse(events[0]!.ts),
+    endMs: Math.max(now, ms),
+    changes,
+  };
+}
+
+/** Count at `ms`: the value of the last change at or before it. */
+export function countAt(changes: StatusChanges, ms: number): number {
+  let lo = 0;
+  let hi = changes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (changes[mid]![0] <= ms) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo === 0 ? 0 : changes[lo - 1]![1];
+}
+
+export function buildEnteredSeries(
+  applications: Application[],
+  { interval, timeZone, now = Date.now() }: EnteredQuery,
+): EnteredSeries | null {
   const events = collectEvents(applications);
   if (events.length === 0) return null;
 
@@ -107,7 +165,6 @@ export function buildStatusSeries(
   const { floor, step } = BUCKET[resolved];
   const context = { in: tz(timeZone) };
 
-  const current = zeroCounts();
   const points: StatusTimelinePoint[] = [];
   const lastBucket = floor(now, context).getTime();
   let i = 0;
@@ -118,21 +175,14 @@ export function buildStatusSeries(
     bucket = step(bucket, 1, context)
   ) {
     const end = step(bucket, 1, context).getTime();
-    const max = { ...current };
     const entered = zeroCounts();
 
     for (; i < events.length && Date.parse(events[i]!.ts) < end; i++) {
-      const { from, to } = events[i]!;
-      if (from !== null) current[from]--;
-      current[to]++;
-      entered[to]++;
-      max[to] = Math.max(max[to], current[to]);
+      entered[events[i]!.to]++;
     }
 
-    const values =
-      aggregator === "entered" ? entered : aggregator === "max" ? max : current;
-    points.push({ ts: new Date(bucket.getTime()).toISOString(), ...values });
+    points.push({ ts: new Date(bucket.getTime()).toISOString(), ...entered });
   }
 
-  return { interval: resolved, aggregator, points };
+  return { interval: resolved, points };
 }
